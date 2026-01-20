@@ -259,8 +259,12 @@ class FFmpegService
         $outputWidth = $this->outputWidth;
         $outputHeight = $this->outputHeight;
 
+        // Ensure output dimensions are even (required by libx264)
+        $outputWidth = $outputWidth % 2 == 0 ? $outputWidth : $outputWidth - 1;
+        $outputHeight = $outputHeight % 2 == 0 ? $outputHeight : $outputHeight - 1;
+
         // Always ensure we have exact output dimensions
-        // Scale first to fit width, then pad or crop to exact height
+        // Scale first to fit width, then pad to exact height
         $filter = "[0:v]scale={$outputWidth}:{$outputHeight}:force_original_aspect_ratio=decrease";
         
         // Always pad to exact dimensions (black bars if needed)
