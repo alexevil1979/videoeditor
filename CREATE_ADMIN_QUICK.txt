@@ -1,0 +1,15 @@
+БЫСТРОЕ СОЗДАНИЕ АДМИНИСТРАТОРА:
+
+# На сервере выполните:
+cd /ssd/www/videoeditor
+php scripts/create-admin.php
+
+# Введите:
+# Email: admin@videoeditor.1tlt.ru (или любой другой)
+# Password: ваш_пароль (минимум 8 символов)
+# First name: Admin (опционально)
+# Last name: User (опционально)
+
+# После создания войдите на:
+# https://videoeditor.1tlt.ru/login
+# Используйте созданные email и password

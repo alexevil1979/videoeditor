@@ -1,0 +1,21 @@
+ВЫПОЛНИТЕ НА СЕРВЕРЕ для создания первого администратора:
+
+# 1. Обновите файлы из репозитория
+cd /ssd/www/videoeditor
+git pull origin main
+
+# 2. Запустите скрипт создания администратора
+php scripts/create-admin.php
+
+# Скрипт попросит ввести:
+# - Email (например: admin@videoeditor.1tlt.ru)
+# - Password (минимум 8 символов)
+# - First name (опционально)
+# - Last name (опционально)
+
+# 3. После создания проверьте:
+mysql -u video_user -p video_overlay -e "SELECT id, email, role FROM users WHERE role = 'admin';"
+
+# 4. Войдите на сайте:
+# https://videoeditor.1tlt.ru/login
+# Используйте созданные email и password

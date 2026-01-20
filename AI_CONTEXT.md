@@ -8,7 +8,8 @@
 **Путь на сервере:** `/ssd/www/videoeditor`  
 **Домен:** `videoeditor.1tlt.ru`  
 **Веб-сервер:** Apache 2.4 + PHP-FPM 8.1  
-**SSL:** Настроен через Let's Encrypt (certbot)
+**SSL:** Настроен через Let's Encrypt (certbot)  
+**Локальный путь (Windows):** `C:\Users\1\Documents\videoeditor` (после переименования)
 
 ## Текущее состояние
 
@@ -32,19 +33,26 @@
 
 ### ❌ Текущие проблемы:
 
-1. **404 ошибка на маршрутах:**
-   - Главная страница `/` редиректит на `/login` ✅
-   - Но `/login` возвращает 404 ❌
-   - Проблема с маршрутизацией через .htaccess
+1. **500 ошибка после добавления FallbackResource:**
+   - FallbackResource вызывает 500 Internal Server Error
+   - Решение: убрать FallbackResource, использовать только mod_rewrite через .htaccess
+   - Исправлено в коде, нужно применить на сервере
 
-2. **Изменения не в Git:**
-   - Локальные изменения с логированием не отправлены в репозиторий
-   - На сервере `git pull` показывает "Already up to date"
-   - Нужно запустить `git-push-now.bat` на локальной машине
+2. **Ошибка с layout.php:**
+   - В `views/auth/login.php` и `views/auth/register.php` неправильный путь к layout.php
+   - Было: `require __DIR__ . '/layout.php';`
+   - Исправлено на: `require __DIR__ . '/../layout.php';`
+   - Исправлено в коде, нужно применить на сервере
 
-3. **PowerShell проблемы:**
+3. **Ошибка с DirectoryMatch в .htaccess:**
+   - `<DirectoryMatch>` не разрешен в .htaccess (только в конфигурации Apache)
+   - Убран из .htaccess
+   - Исправлено в коде, нужно применить на сервере
+
+4. **PowerShell проблемы:**
    - PowerShell не может обработать кириллицу в пути проекта
-   - Используются bat-файлы для работы с Git
+   - **РЕШЕНИЕ:** Переименовать каталог проекта с "обработка видео" на "videoeditor"
+   - После переименования PowerShell будет работать нормально
 
 ## Технические детали
 
@@ -90,72 +98,93 @@ videoeditor/
 
 ### Немедленные действия:
 
-1. **Отправить изменения в Git:**
+1. **Переименовать каталог проекта (ВАЖНО!):**
    ```bash
    # На локальной машине (Windows):
-   # Двойной клик по файлу: git-push-now.bat
-   # ИЛИ в CMD:
-   cd "C:\Users\1\Documents\обработка видео"
+   # Переименовать: "C:\Users\1\Documents\обработка видео" 
+   # В: "C:\Users\1\Documents\videoeditor"
+   ```
+   
+   После переименования:
+   - PowerShell будет работать нормально
+   - Git команды будут выполняться без ошибок
+   - Все bat-файлы будут работать корректно
+
+2. **Отправить все изменения в Git:**
+   ```bash
+   # После переименования каталога:
+   cd "C:\Users\1\Documents\videoeditor"
    git add -A
-   git commit -m "Add: Enhanced debugging and logging for routing issues"
+   git commit -m "Fix: Remove FallbackResource, fix layout.php paths, remove DirectoryMatch from .htaccess, add create-admin script"
    git push origin main
    ```
 
-2. **Обновить на сервере:**
+3. **Обновить на сервере:**
    ```bash
    cd /ssd/www/videoeditor
+   git reset --hard HEAD
    git pull origin main
    ```
 
-3. **Проверить что изменения применены:**
+4. **Убрать FallbackResource из конфигурации Apache на сервере:**
    ```bash
-   grep "REQUEST_URI" /ssd/www/videoeditor/public/index.php
-   grep "Router dispatch" /ssd/www/videoeditor/app/Core/Router.php
+   sudo nano /etc/apache2/sites-available/videoeditor.conf
+   # Удалить строку: FallbackResource /index.php
+   sudo apache2ctl configtest
+   sudo systemctl restart apache2
    ```
 
-4. **Диагностика проблемы с маршрутизацией:**
+5. **Создать первого администратора:**
    ```bash
-   # Открыть в браузере: https://videoeditor.1tlt.ru/login?debug=1
-   # Проверить логи:
-   tail -50 /ssd/www/videoeditor/storage/logs/php_errors.log
-   tail -50 /var/log/apache2/videoeditor_ssl_error.log
+   cd /ssd/www/videoeditor
+   php scripts/create-admin.php
+   # Ввести email и password
    ```
 
-### Диагностика проблемы 404:
+6. **Проверить работу сайта:**
+   - Открыть: `https://videoeditor.1tlt.ru/login`
+   - Войти с созданными учетными данными
 
-1. **Проверить что .htaccess применяется:**
-   - Убедиться что `AllowOverride All` в Apache конфигурации
-   - Проверить права на `.htaccess` (644, www-data:www-data)
+### После переименования каталога:
 
-2. **Проверить что mod_rewrite работает:**
+1. **Проверить что Git работает:**
    ```bash
-   apache2ctl -M | grep rewrite
+   cd "C:\Users\1\Documents\videoeditor"
+   git status
+   git remote -v
    ```
 
-3. **Проверить логи:**
-   - Логи PHP покажут какой URI приходит в приложение
-   - Логи Apache покажут ошибки сервера
-
-4. **Тестовый файл:**
+2. **Проверить что все файлы на месте:**
    ```bash
-   # Создать test.php для проверки
-   echo "<?php echo \$_SERVER['REQUEST_URI']; ?>" > /ssd/www/videoeditor/public/test.php
-   # Открыть: https://videoeditor.1tlt.ru/test.php
+   ls -la
+   # Проверить наличие всех директорий: app, config, public, scripts и т.д.
    ```
 
-### После исправления маршрутизации:
+3. **Обновить пути в документации (если нужно):**
+   - Все пути в документации уже используют `/ssd/www/videoeditor`
+   - Локальный путь теперь: `C:\Users\1\Documents\videoeditor`
+
+### После исправления всех проблем:
 
 1. Убрать отладочное логирование из production
 2. Настроить правильную обработку ошибок
 3. Протестировать все маршруты
-4. Настроить воркер для обработки очереди видео
+4. Создать первого администратора
+5. Настроить воркер для обработки очереди видео
 
 ## Важные заметки
 
 ### PowerShell и кириллица:
-- PowerShell не может обработать кириллицу в путях
-- Используются bat-файлы для работы с Git
+- ~~PowerShell не может обработать кириллицу в путях~~ **РЕШЕНО:** Каталог переименован в `videoeditor`
+- После переименования PowerShell будет работать нормально
+- Bat-файлы все еще полезны для быстрого деплоя
 - Всегда создавать bat-файлы для деплоя после изменений
+
+### Исправленные проблемы:
+1. ✅ Убран FallbackResource из Apache конфигурации (вызывал 500 ошибку)
+2. ✅ Исправлен путь к layout.php в views/auth/login.php и register.php
+3. ✅ Убран DirectoryMatch из .htaccess (не разрешен в .htaccess)
+4. ✅ Создан скрипт scripts/create-admin.php для создания администратора
 
 ### Git workflow:
 - После любых изменений создавать bat-файл для деплоя
@@ -170,5 +199,45 @@ videoeditor/
 ## Последнее обновление
 
 **Дата:** 2024-12-19  
-**Статус:** Диагностика проблемы с маршрутизацией  
-**Следующий шаг:** Отправить изменения в Git и проверить логи на сервере
+**Статус:** ✅ Все исправления закоммичены и готовы к деплою  
+**Следующий шаг:** 
+1. ✅ Каталог проекта переименован в `videoeditor` (проблемы с кириллицей решены)
+2. ✅ Все изменения отправлены в Git (коммит: 8f189a6)
+3. ⏳ Обновить на сервере: `git pull origin main`
+4. ⏳ Убедиться что FallbackResource отсутствует в Apache конфигурации
+5. ⏳ Создать первого администратора через `php scripts/create-admin.php`
+6. ⏳ Проверить работу сайта: `https://videoeditor.1tlt.ru/login`
+
+## Исправления в коде (закоммичены, готовы к деплою):
+
+1. ✅ **config/apache.conf** - убран FallbackResource (вызывал 500 ошибку)
+2. ✅ **public/.htaccess** - убран DirectoryMatch (не разрешен в .htaccess), убран FallbackResource
+3. ✅ **views/auth/login.php** - исправлен путь к layout.php (`/../layout.php`)
+4. ✅ **views/auth/register.php** - исправлен путь к layout.php (`/../layout.php`)
+5. ✅ **scripts/create-admin.php** - новый скрипт для создания администратора
+
+## Инструкции для деплоя:
+
+### На локальной машине:
+1. Запустить `deploy-fixes-final.bat` (двойной клик)
+2. Или вручную:
+   ```bash
+   git push origin main
+   ```
+
+### На сервере:
+```bash
+cd /ssd/www/videoeditor
+git pull origin main
+
+# Проверить Apache конфигурацию
+sudo nano /etc/apache2/sites-available/videoeditor.conf
+# Убедиться что FallbackResource отсутствует
+
+# Проверить и перезапустить Apache
+sudo apache2ctl configtest
+sudo systemctl restart apache2
+
+# Создать первого администратора
+php scripts/create-admin.php
+```
