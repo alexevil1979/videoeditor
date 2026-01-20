@@ -1,0 +1,34 @@
+========================================
+КОМАНДЫ ДЛЯ ПРИМЕНЕНИЯ НА СЕРВЕРЕ
+========================================
+Дата: 2024-12-19
+Изменения: Добавлен интерфейс создания пресетов с кнопками Subscribe, Like, Title
+
+1. Обновить код из Git:
+   cd /ssd/www/videoeditor
+   git pull origin main
+
+2. Проверить права доступа:
+   sudo chown -R www-data:www-data /ssd/www/videoeditor
+   sudo chmod -R 755 /ssd/www/videoeditor
+   sudo chmod -R 775 /ssd/www/videoeditor/storage
+
+3. Очистить кэш (если используется):
+   sudo rm -rf /ssd/www/videoeditor/storage/cache/*
+
+4. Проверить работу сайта:
+   - Открыть: https://videoeditor.1tlt.ru/dashboard
+   - Войти в систему
+   - Проверить секцию "Мои пресеты"
+   - Создать тестовый пресет
+
+5. Проверить логи (если есть ошибки):
+   tail -f /ssd/www/videoeditor/storage/logs/php_errors.log
+   tail -f ${APACHE_LOG_DIR}/videoeditor_ssl_error.log
+
+========================================
+БЫСТРАЯ КОМАНДА (все в одной строке):
+========================================
+cd /ssd/www/videoeditor && git pull origin main && sudo chown -R www-data:www-data /ssd/www/videoeditor && sudo chmod -R 755 /ssd/www/videoeditor && sudo chmod -R 775 /ssd/www/videoeditor/storage
+
+========================================
