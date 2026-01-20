@@ -107,10 +107,19 @@ class FFmpegService
 
         if ($returnCode !== 0 || !file_exists($outputPath)) {
             $errorOutput = implode("\n", $output);
+            
+            // If no output, try to get more info
+            if (empty($errorOutput)) {
+                $errorOutput = "FFmpeg returned code {$returnCode} but produced no output.\n";
+                $errorOutput .= "Input file: {$inputPath}\n";
+                $errorOutput .= "Output file: {$outputPath}\n";
+                $errorOutput .= "Command: {$command}\n";
+            }
+            
             return [
                 'success' => false,
                 'message' => 'FFmpeg processing failed',
-                'error' => $errorOutput ?: "FFmpeg returned code {$returnCode} but no error output",
+                'error' => $errorOutput,
             ];
         }
 

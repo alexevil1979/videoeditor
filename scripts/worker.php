@@ -53,6 +53,13 @@ while (true) {
         $startTime = time();
         try {
             $result = $ffmpegService->processVideo($jobId, $videoId, $presetId);
+            
+            // Debug: show what we got
+            if (!$result['success']) {
+                echo "DEBUG: FFmpegService returned error\n";
+                echo "DEBUG: message = " . ($result['message'] ?? 'NOT SET') . "\n";
+                echo "DEBUG: error = " . (isset($result['error']) ? substr($result['error'], 0, 200) : 'NOT SET') . "\n";
+            }
         } catch (\Exception $e) {
             $result = [
                 'success' => false,
