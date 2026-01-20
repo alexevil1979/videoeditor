@@ -291,14 +291,14 @@ class FFmpegService
         $filter .= "fontsize={$fontSize}:";
         $filter .= "fontcolor={$fontColor}:";
         $filter .= "x={$x}:";
-        $filter .= "y={$y}:";
+        $filter .= "y={$y}";
 
         if ($bgColor) {
-            $filter .= "box=1:boxcolor={$bgColor}@0.5:";
+            $filter .= ":box=1:boxcolor={$bgColor}@0.5";
         }
 
         if ($startTime > 0 || $endTime) {
-            $filter .= "enable='between(t,{$startTime}";
+            $filter .= ":enable='between(t,{$startTime}";
             if ($endTime) {
                 $filter .= ",{$endTime}";
             } else {
@@ -307,8 +307,7 @@ class FFmpegService
             $filter .= ")'";
         }
 
-        $filter .= ":";
-        $filter .= "[{$inputLabel}]";
+        $filter .= ":[{$inputLabel}]";
 
         return $filter;
     }
