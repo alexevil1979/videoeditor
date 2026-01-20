@@ -239,6 +239,8 @@ class FFmpegService
         $cmd .= " -crf " . Config::get('ffmpeg.crf', 23);
         $cmd .= " -preset " . escapeshellarg(Config::get('ffmpeg.preset', 'medium'));
         $cmd .= " -threads {$this->threads}";
+        // Explicitly set output dimensions for encoder
+        $cmd .= " -s {$this->outputWidth}x{$this->outputHeight}";
         $cmd .= " -movflags +faststart"; // Web optimization
 
         // Output
@@ -254,26 +256,13 @@ class FFmpegService
         $outputWidth = $this->outputWidth;
         $outputHeight = $this->outputHeight;
 
-        // Calculate scale to fit while maintaining aspect ratio
-        $scaleW = $outputWidth;
-        $scaleH = -1; // Maintain aspect ratio
-        $padX = 0;
-        $padY = 0;
-
-        // Scale first
-        $filter = "[0:v]scale={$scaleW}:{$scaleH}";
-
-        // Then pad to exact dimensions if needed
-        $scaledHeight = (int) ($inputHeight * $outputWidth / $inputWidth);
-        if ($scaledHeight < $outputHeight) {
-            $padY = ($outputHeight - $scaledHeight) / 2;
-            $filter .= ",pad={$outputWidth}:{$outputHeight}:0:{$padY}:black";
-        } elseif ($scaledHeight > $outputHeight) {
-            // Crop if too tall
-            $cropY = ($scaledHeight - $outputHeight) / 2;
-            $filter .= ",crop={$outputWidth}:{$outputHeight}:0:{$cropY}";
-        }
-
+        // Always ensure we have exact output dimensions
+        // Scale first to fit width, then pad or crop to exact height
+        $filter = "[0:v]scale={$outputWidth}:{$outputHeight}:force_original_aspect_ratio=decrease";
+        
+        // Always pad to exact dimensions (black bars if needed)
+        $filter .= ",pad={$outputWidth}:{$outputHeight}:(ow-iw)/2:(oh-ih)/2:black";
+        
         $filter .= "[v]";
 
         return $filter;
