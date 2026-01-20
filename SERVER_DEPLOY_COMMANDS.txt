@@ -2,53 +2,48 @@
 КОМАНДЫ ДЛЯ ПРИМЕНЕНИЯ НА СЕРВЕРЕ
 ========================================
 Дата: 2024-12-19
-Изменения: Улучшен вывод ошибок в консоль воркера для отладки
+Изменения: Исправлено создание директории логов
 
 1. Обновить код из Git:
    cd /ssd/www/videoeditor
    git pull origin main
 
-2. Проверить права доступа:
+2. Создать директорию логов (если не существует):
+   mkdir -p /ssd/www/videoeditor/storage/logs
+   chmod 775 /ssd/www/videoeditor/storage/logs
+
+3. Проверить права доступа:
    sudo chown -R www-data:www-data /ssd/www/videoeditor
    sudo chmod -R 755 /ssd/www/videoeditor
    sudo chmod -R 775 /ssd/www/videoeditor/storage
-
-3. Очистить кэш (если используется):
-   sudo rm -rf /ssd/www/videoeditor/storage/cache/*
 
 4. Перезапустить воркер:
    # Если воркер запущен вручную, остановите его (Ctrl+C)
    # Затем запустите заново:
    cd /ssd/www/videoeditor
    php scripts/worker.php
-   
-   # Теперь воркер будет выводить детальные ошибки в консоль!
 
-5. Проверить логи ошибок (в другом терминале):
-   # Логи воркера
+5. Проверить ошибку из базы данных:
+   mysql -u video_user -p video_overlay -e "SELECT id, error_message FROM render_jobs WHERE status='failed' ORDER BY id DESC LIMIT 1\G"
+
+6. Проверить логи (после перезапуска воркера):
    tail -f /ssd/www/videoeditor/storage/logs/worker_errors.log
-   
-   # Логи FFmpeg команд
    tail -f /ssd/www/videoeditor/storage/logs/ffmpeg_commands.log
-
-6. Проверить ошибки в базе данных:
-   mysql -u video_user -p video_overlay -e "SELECT id, error_message FROM render_jobs WHERE status='failed' ORDER BY id DESC LIMIT 5;"
 
 ========================================
 БЫСТРАЯ КОМАНДА (все в одной строке):
 ========================================
-cd /ssd/www/videoeditor && git pull origin main && sudo chown -R www-data:www-data /ssd/www/videoeditor && sudo chmod -R 755 /ssd/www/videoeditor && sudo chmod -R 775 /ssd/www/videoeditor/storage
+cd /ssd/www/videoeditor && git pull origin main && mkdir -p storage/logs && sudo chown -R www-data:www-data /ssd/www/videoeditor && sudo chmod -R 755 /ssd/www/videoeditor && sudo chmod -R 775 /ssd/www/videoeditor/storage
 
 ========================================
-ВАЖНО: После обновления перезапустите воркер!
+ВАЖНО: Проверьте ошибку в базе данных!
 ========================================
-Воркер теперь выводит детальные ошибки в консоль.
-Вы увидите:
-- Сообщение об ошибке
-- Вывод FFmpeg (первые 500 символов)
-- Путь к полному логу
+Ошибка "FFmpeg processing failed" - это общее сообщение.
+Детали ошибки сохранены в базе данных в поле error_message.
 
-Для просмотра полного лога:
-tail -f /ssd/www/videoeditor/storage/logs/worker_errors.log
+Выполните:
+mysql -u video_user -p video_overlay -e "SELECT id, error_message FROM render_jobs WHERE status='failed' ORDER BY id DESC LIMIT 1\G"
+
+Это покажет полную ошибку FFmpeg с деталями!
 
 ========================================
