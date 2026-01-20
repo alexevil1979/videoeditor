@@ -1,0 +1,25 @@
+Выполните на сервере ПРЯМО СЕЙЧАС:
+
+# 1. Включите необходимые модули Apache
+sudo a2enmod ssl
+sudo a2enmod rewrite
+sudo a2enmod proxy
+sudo a2enmod proxy_fcgi
+
+# 2. Обновите конфигурацию Apache
+cd /ssd/www/videoeditor
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+
+# 3. Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# 4. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 5. Проверьте статус
+sudo systemctl status apache2
+
+# 6. Проверьте SSL сертификат
+sudo certbot certificates
+
+# 7. Откройте в браузере: https://videoeditor.1tlt.ru

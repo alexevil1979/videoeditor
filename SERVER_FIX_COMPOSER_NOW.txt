@@ -1,0 +1,19 @@
+Выполните на сервере ПРЯМО СЕЙЧАС:
+
+cd /ssd/www/videoeditor
+
+# Вариант 1: Использовать флаг игнорирования (быстро)
+composer install --ignore-platform-req=ext-gd --ignore-platform-req=ext-mbstring --no-dev --optimize-autoloader
+
+# После этого ОБЯЗАТЕЛЬНО установите mbstring:
+sudo apt install -y php-pear php8.1-dev
+pecl install mbstring
+echo "extension=mbstring.so" >> /usr/local/php8.1/etc/php.ini
+/usr/local/php8.1/bin/php -m | grep mbstring
+sudo systemctl restart php8.1-fpm
+
+# Вариант 2: Обновить composer.json вручную (если вариант 1 не работает)
+# nano composer.json
+# Убедитесь что в "require" только "php": ">=8.1"
+# А в "suggest" есть ext-gd и ext-mbstring
+# Затем: composer install --no-dev --optimize-autoloader

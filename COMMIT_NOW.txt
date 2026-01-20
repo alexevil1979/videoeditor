@@ -1,0 +1,7 @@
+Все изменения готовы. Выполните в терминале:
+
+git add .
+git commit -m "Fix PHP extensions requirements and update documentation"
+git push origin main
+
+Или запустите файл git-push.ps1

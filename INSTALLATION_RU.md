@@ -12,7 +12,17 @@
 
 ```bash
 sudo apt update
-sudo apt install -y php8.1-fpm php8.1-mysql php8.1-gd php8.1-mbstring php8.1-zip nginx mysql-server ffmpeg git composer
+sudo apt install -y php8.1-fpm php8.1-mysql php8.1-mbstring apache2 libapache2-mod-php8.1 mysql-server ffmpeg git composer
+
+# Опционально: Установите GD для кнопок наложений
+# sudo apt install -y php8.1-gd
+
+# Проверьте установленные расширения PHP
+php -m | grep -E "pdo_mysql|mbstring"
+
+# Если расширения отсутствуют:
+# sudo apt install -y php8.1-mbstring
+# sudo systemctl restart php8.1-fpm
 ```
 
 ### 3. Настройка базы данных
@@ -64,12 +74,14 @@ sudo chmod -R 775 /ssd/www/videoeditor/storage
 ### 8. Конфигурация Nginx
 
 ```bash
-sudo cp config/nginx.conf /etc/nginx/sites-available/videoeditor
-sudo nano /etc/nginx/sites-available/videoeditor
-# Обновите server_name с вашим доменом
-sudo ln -s /etc/nginx/sites-available/videoeditor /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo a2enmod rewrite php8.1 expires deflate
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+sudo nano /etc/apache2/sites-available/videoeditor.conf
+# Обновите ServerName на videoeditor.1tlt.ru
+sudo a2ensite videoeditor.conf
+sudo a2dissite 000-default.conf
+sudo apache2ctl configtest
+sudo systemctl restart apache2
 ```
 
 ### 9. Настройка сервиса воркера
@@ -96,8 +108,8 @@ sudo systemctl status video-worker
 ### SSL сертификат (Let's Encrypt)
 
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d your-domain.com
+sudo apt install certbot python3-certbot-apache
+sudo certbot --apache -d videoeditor.1tlt.ru
 ```
 
 ### Настройка файрвола
@@ -160,8 +172,9 @@ mysql -u video_user -p video_overlay
 ### Ошибки Nginx
 
 ```bash
-sudo nginx -t
-sudo tail -f /var/log/nginx/error.log
+sudo apache2ctl configtest
+sudo tail -f /var/log/apache2/videoeditor_error.log
+sudo tail -f /var/log/apache2/error.log
 ```
 
 ## Чеклист для продакшена

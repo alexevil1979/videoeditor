@@ -6,7 +6,10 @@
 
 ```bash
 sudo apt update
-sudo apt install -y php8.1-fpm php8.1-mysql php8.1-gd php8.1-mbstring php8.1-zip nginx mysql-server ffmpeg git composer
+sudo apt install -y php8.1-fpm php8.1-mysql php8.1-mbstring apache2 libapache2-mod-php8.1 mysql-server ffmpeg git composer
+
+# Опционально: Установите GD для кнопок наложений
+# sudo apt install -y php8.1-gd
 ```
 
 ### 2. Настройка MySQL
@@ -59,13 +62,16 @@ sudo chmod -R 755 /ssd/www/videoeditor
 sudo chmod -R 775 /ssd/www/videoeditor/storage
 ```
 
-### 8. Конфигурация Nginx
+### 8. Конфигурация Apache
 
 ```bash
-sudo cp config/nginx.conf /etc/nginx/sites-available/videoeditor
-sudo ln -s /etc/nginx/sites-available/videoeditor /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo a2enmod rewrite php8.1 expires deflate
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+sudo nano /etc/apache2/sites-available/videoeditor.conf  # Обновите ServerName на videoeditor.1tlt.ru
+sudo a2ensite videoeditor.conf
+sudo a2dissite 000-default.conf
+sudo apache2ctl configtest
+sudo systemctl restart apache2
 ```
 
 ### 9. Настройка сервиса воркера
@@ -99,7 +105,7 @@ bash scripts/deploy.sh
 ## После развертывания
 
 1. **Измените пароль администратора**: Войдите с учетными данными по умолчанию и измените немедленно
-2. **Настройте домен**: Обновите конфигурацию Nginx с вашим доменным именем
+2. **Настройте домен**: Обновите конфигурацию Apache с доменным именем (videoeditor.1tlt.ru)
 3. **SSL сертификат**: Установите сертификат Let's Encrypt
 4. **Файрвол**: Настройте UFW для разрешения только необходимых портов
 5. **Резервное копирование**: Настройте автоматическое резервное копирование базы данных и хранилища
@@ -108,7 +114,7 @@ bash scripts/deploy.sh
 
 - Проверка статуса воркера: `sudo systemctl status video-worker`
 - Просмотр логов воркера: `sudo journalctl -u video-worker -f`
-- Проверка логов Nginx: `sudo tail -f /var/log/nginx/videoeditor-error.log`
+- Проверка логов Apache: `sudo tail -f /var/log/apache2/videoeditor_error.log`
 - Мониторинг очереди: Проверьте панель администратора
 
 ## Устранение неполадок
@@ -120,7 +126,7 @@ bash scripts/deploy.sh
 - Проверьте права доступа к директориям хранилища
 
 ### Сбои загрузки
-- Проверьте `client_max_body_size` в Nginx
+- Проверьте `LimitRequestBody` в config/apache.conf
 - Проверьте `upload_max_filesize` и `post_max_size` в PHP
 - Проверьте права доступа к директории хранилища
 

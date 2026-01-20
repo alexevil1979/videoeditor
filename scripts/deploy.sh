@@ -38,7 +38,7 @@ rm -rf "$APP_DIR/storage/cache/*"
 # Reload services (no downtime)
 echo "Reloading services..."
 sudo systemctl reload php${PHP_VERSION}-fpm
-sudo systemctl reload nginx
+sudo systemctl restart apache2
 
 # Restart worker (graceful)
 echo "Restarting worker..."

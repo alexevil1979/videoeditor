@@ -1,0 +1,45 @@
+Выполните на сервере ПРЯМО СЕЙЧАС для исправления 404 на /login:
+
+# 1. Включите mod_rewrite (ОБЯЗАТЕЛЬНО!)
+sudo a2enmod rewrite
+
+# 2. Обновите файлы из репозитория
+cd /ssd/www/videoeditor
+git pull origin main
+
+# 3. Установите правильные права
+sudo chown -R www-data:www-data /ssd/www/videoeditor
+sudo chmod -R 755 /ssd/www/videoeditor
+sudo chmod 644 /ssd/www/videoeditor/public/.htaccess
+sudo chmod 644 /ssd/www/videoeditor/public/index.php
+
+# 4. Проверьте что vendor/autoload.php существует
+ls -la /ssd/www/videoeditor/vendor/autoload.php
+
+# Если нет, установите зависимости:
+composer install --no-dev --optimize-autoloader
+
+# 5. Обновите конфигурацию Apache
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+
+# 6. Проверьте что AllowOverride All настроен
+sudo grep -A 3 "AllowOverride" /etc/apache2/sites-available/videoeditor.conf
+
+# 7. Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# 8. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 9. Проверьте что mod_rewrite включен
+apache2ctl -M | grep rewrite
+
+# 10. Проверьте логи
+sudo tail -50 /var/log/apache2/videoeditor_ssl_error.log
+
+# 11. Проверьте что .htaccess читается
+sudo cat /ssd/www/videoeditor/public/.htaccess
+
+# 12. Проверьте в браузере с отладкой
+# https://videoeditor.1tlt.ru/login?debug=1
+# https://videoeditor.1tlt.ru/login

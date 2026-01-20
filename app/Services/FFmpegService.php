@@ -76,11 +76,16 @@ class FFmpegService
         $input = escapeshellarg($inputPath);
         $output = escapeshellarg($outputPath);
 
-        // Generate overlay images first
+        // Generate overlay images first (only if GD is available)
         $overlayInputs = [];
         foreach ($presetItems as $index => $item) {
-            if ($item['type'] === 'subscribe' || $item['type'] === 'like') {
-                $overlayInputs[$index] = $this->generateOverlayImage($item, $index);
+            if (($item['type'] === 'subscribe' || $item['type'] === 'like') && extension_loaded('gd')) {
+                try {
+                    $overlayInputs[$index] = $this->generateOverlayImage($item, $index);
+                } catch (\Exception $e) {
+                    // Skip image generation if GD fails, will use text overlay instead
+                    error_log("GD image generation failed: " . $e->getMessage());
+                }
             }
         }
 
@@ -179,9 +184,15 @@ class FFmpegService
 
         if ($type === 'title') {
             return $this->buildTextOverlay($item, $x, $y, $opacity, $startTime, $endTime, $inputLabel);
-        } elseif ($type === 'subscribe' || $type === 'like') {
+        } elseif (($type === 'subscribe' || $type === 'like') && isset($overlayInputs[$index])) {
+            // Only use image overlay if image was generated
             $overlayIndex = $index + 1; // +1 because input 0 is the video
             return $this->buildImageOverlay($item, $x, $y, $opacity, $scale, $startTime, $endTime, $overlayIndex, $inputLabel);
+        } elseif ($type === 'subscribe' || $type === 'like') {
+            // Fallback to text overlay if GD is not available
+            $text = strtoupper($type);
+            $item['text'] = $text;
+            return $this->buildTextOverlay($item, $x, $y, $opacity, $startTime, $endTime, $inputLabel);
         }
 
         return '';
@@ -260,10 +271,25 @@ class FFmpegService
 
         $imagePath = $cacheDir . "/overlay_{$type}_{$index}.png";
 
+        // Check if file already exists
+        if (file_exists($imagePath)) {
+            return $imagePath;
+        }
+
+        // Check if GD extension is available
+        if (!extension_loaded('gd')) {
+            // Return empty string - caller should handle fallback
+            throw new \RuntimeException('GD extension is not available. Image overlays will be skipped.');
+        }
+
         // Generate button image using GD
         $width = 200;
         $height = 60;
         $image = imagecreatetruecolor($width, $height);
+        
+        if (!$image) {
+            throw new \RuntimeException('Failed to create image with GD');
+        }
         
         // Background
         $bgColor = imagecolorallocate($image, 255, 0, 0); // Red for subscribe
@@ -281,7 +307,10 @@ class FFmpegService
         imagestring($image, $fontSize, $textX, $textY, $text, $textColor);
 
         // Save
-        imagepng($image, $imagePath);
+        if (!imagepng($image, $imagePath)) {
+            imagedestroy($image);
+            throw new \RuntimeException("Failed to save overlay image to: {$imagePath}");
+        }
         imagedestroy($image);
 
         return $imagePath;

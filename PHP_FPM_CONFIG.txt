@@ -1,0 +1,28 @@
+Настройте PHP-FPM для больших загрузок:
+
+# 1. Отредактируйте php.ini
+sudo nano /etc/php/8.1/fpm/php.ini
+# или
+sudo nano /usr/local/php8.1/etc/php.ini
+
+# Найдите и измените:
+upload_max_filesize = 100M
+post_max_size = 100M
+max_execution_time = 300
+memory_limit = 512M
+
+# 2. Отредактируйте конфигурацию пула (опционально)
+sudo nano /etc/php/8.1/fpm/pool.d/www.conf
+# или
+sudo nano /etc/php8.1/fpm/pool.d/www.conf
+
+# Найдите и измените:
+php_admin_value[upload_max_filesize] = 100M
+php_admin_value[post_max_size] = 100M
+php_admin_value[max_execution_time] = 300
+php_admin_value[memory_limit] = 512M
+
+# 3. Перезапустите PHP-FPM
+sudo systemctl restart php8.1-fpm
+# или
+sudo systemctl restart php-fpm

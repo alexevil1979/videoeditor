@@ -3,11 +3,14 @@
     "description": "Video overlay processing SaaS platform",
     "type": "project",
     "require": {
-        "php": ">=8.1",
-        "ext-pdo": "*",
-        "ext-json": "*",
-        "ext-mbstring": "*",
-        "ext-gd": "*"
+        "php": ">=8.1"
+    },
+    "require-dev": {},
+    "suggest": {
+        "ext-pdo": "Required for database operations",
+        "ext-json": "Required for JSON handling",
+        "ext-mbstring": "Required for string operations",
+        "ext-gd": "Optional - for generating image overlay buttons (Subscribe/Like). Without GD, buttons will use text overlays instead."
     },
     "autoload": {
         "psr-4": {

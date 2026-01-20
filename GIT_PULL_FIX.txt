@@ -1,0 +1,7 @@
+Выполните на сервере:
+
+cd /ssd/www/videoeditor
+git config --global --add safe.directory /ssd/www/videoeditor
+git pull origin main
+
+После этого можно продолжать установку.

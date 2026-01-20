@@ -1,0 +1,36 @@
+Выполните на сервере для настройки SSL:
+
+# 1. Установите Certbot
+sudo apt update
+sudo apt install -y certbot python3-certbot-apache
+
+# 2. Получите сертификат (автоматическая настройка может не сработать)
+sudo certbot certonly --apache -d videoeditor.1tlt.ru
+# или используйте webroot (более надежно):
+# sudo certbot certonly --webroot -w /ssd/www/videoeditor/public -d videoeditor.1tlt.ru
+
+# Certbot спросит:
+# - Email для уведомлений (укажите ваш email)
+# - Согласие с условиями (A)
+# - Редирект HTTP на HTTPS (2 - редирект)
+
+# 3. Настройте Apache вручную (если автоматическая настройка не сработала)
+cd /ssd/www/videoeditor
+git pull origin main
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+sudo a2enmod ssl rewrite proxy proxy_fcgi
+sudo apache2ctl configtest
+sudo systemctl restart apache2
+
+# 3. Обновите config.php для HTTPS
+cd /ssd/www/videoeditor
+nano config/config.php
+# Измените: 'url' => 'https://videoeditor.1tlt.ru'
+
+# 4. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 5. Проверьте SSL
+sudo certbot certificates
+
+# 6. Откройте в браузере: https://videoeditor.1tlt.ru

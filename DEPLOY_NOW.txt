@@ -1,0 +1,13 @@
+ВЫПОЛНИТЕ СЕЙЧАС:
+
+Двойной клик по файлу: git-push-now.bat
+
+Или в командной строке:
+cd "C:\Users\1\Documents\обработка видео"
+git add -A
+git commit -m "Add: Enhanced debugging and logging for routing issues"
+git push origin main
+
+После этого на сервере:
+cd /ssd/www/videoeditor
+git pull origin main

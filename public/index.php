@@ -1,5 +1,20 @@
 <?php
 
+// Включить отладку (временно, для диагностики)
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/../storage/logs/php_errors.log');
+
+// Логирование для отладки
+if (!file_exists(__DIR__ . '/../storage/logs')) {
+    mkdir(__DIR__ . '/../storage/logs', 0755, true);
+}
+error_log("=== REQUEST START ===");
+error_log("REQUEST_URI: " . ($_SERVER['REQUEST_URI'] ?? 'NOT SET'));
+error_log("SCRIPT_NAME: " . ($_SERVER['SCRIPT_NAME'] ?? 'NOT SET'));
+error_log("PHP_SELF: " . ($_SERVER['PHP_SELF'] ?? 'NOT SET'));
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use App\Core\Config;

@@ -1,0 +1,26 @@
+Выполните на ЛОКАЛЬНОЙ машине (Windows) для отправки изменений в Git:
+
+# 1. Перейдите в директорию проекта
+cd "C:\Users\1\Documents\обработка видео"
+
+# 2. Проверьте статус
+git status
+
+# 3. Добавьте все изменения
+git add -A
+
+# 4. Проверьте что будет закоммичено
+git status
+
+# 5. Создайте коммит
+git commit -m "Add: Enhanced debugging and logging for routing issues"
+
+# 6. Отправьте изменения в репозиторий
+git push origin main
+
+# 7. Проверьте что изменения отправлены
+git log --oneline -3
+
+# После этого на сервере выполните:
+# cd /ssd/www/videoeditor
+# git pull origin main

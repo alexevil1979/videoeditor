@@ -1,0 +1,37 @@
+Выполните на сервере ПРЯМО СЕЙЧАС для исправления 404:
+
+# 1. Включите mod_rewrite (ВАЖНО!)
+sudo a2enmod rewrite
+
+# 2. Обновите файлы из репозитория
+cd /ssd/www/videoeditor
+git pull origin main
+
+# 3. Проверьте что файлы существуют
+ls -la public/index.php
+ls -la public/.htaccess
+
+# 4. Установите правильные права
+sudo chown -R www-data:www-data /ssd/www/videoeditor
+sudo chmod -R 755 /ssd/www/videoeditor
+sudo chmod 644 /ssd/www/videoeditor/public/.htaccess
+sudo chmod 644 /ssd/www/videoeditor/public/index.php
+
+# 5. Обновите конфигурацию Apache
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+
+# 6. Проверьте что AllowOverride All настроен
+sudo grep -A 3 "AllowOverride" /etc/apache2/sites-available/videoeditor.conf
+
+# 7. Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# 8. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 9. Проверьте логи
+sudo tail -30 /var/log/apache2/videoeditor_ssl_error.log
+
+# 10. Проверьте в браузере
+# https://videoeditor.1tlt.ru/login
+# https://videoeditor.1tlt.ru/register

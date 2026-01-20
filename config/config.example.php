@@ -3,7 +3,7 @@
 return [
     'app' => [
         'name' => 'Video Editor SaaS',
-        'url' => 'http://localhost',
+        'url' => 'http://videoeditor.1tlt.ru',
         'timezone' => 'UTC',
         'debug' => false,
     ],

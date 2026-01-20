@@ -1,0 +1,11 @@
+Выполните на сервере прямо сейчас:
+
+cd /ssd/www/videoeditor
+composer install --ignore-platform-req=ext-gd --ignore-platform-req=ext-mbstring --no-dev --optimize-autoloader
+
+После этого обязательно установите mbstring:
+sudo apt install -y php-pear php8.1-dev
+pecl install mbstring
+echo "extension=mbstring.so" >> /usr/local/php8.1/etc/php.ini
+/usr/local/php8.1/bin/php -m | grep mbstring
+sudo systemctl restart php8.1-fpm

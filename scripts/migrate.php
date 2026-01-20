@@ -39,17 +39,33 @@ try {
         }
         
         try {
-            Database::getInstance()->exec($statement);
+            $result = Database::getInstance()->exec($statement);
+            if ($result !== false) {
+                echo "✓ Executed: " . substr(trim($statement), 0, 60) . "...\n";
+            }
         } catch (\PDOException $e) {
             // Ignore "table already exists" errors
-            if (strpos($e->getMessage(), 'already exists') === false) {
-                throw $e;
+            if (strpos($e->getMessage(), 'already exists') !== false) {
+                echo "⊘ Skipped (already exists): " . substr(trim($statement), 0, 60) . "...\n";
+                continue;
             }
+            // Show errors
+            echo "✗ Error: " . $e->getMessage() . "\n";
+            echo "  Statement: " . substr(trim($statement), 0, 100) . "...\n";
         }
     }
 
     Database::getInstance()->commit();
-    echo "Database schema loaded successfully!\n";
+    
+    // Verify tables were created
+    $tables = Database::query("SHOW TABLES")->fetchAll(\PDO::FETCH_COLUMN);
+    echo "\nDatabase schema loaded!\n";
+    echo "Tables created: " . count($tables) . "\n";
+    if (count($tables) > 0) {
+        echo "Table list: " . implode(', ', $tables) . "\n";
+    } else {
+        echo "⚠️  WARNING: No tables found! Check database connection and permissions.\n";
+    }
 } catch (\Exception $e) {
     Database::getInstance()->rollBack();
     die("Error: " . $e->getMessage() . "\n");

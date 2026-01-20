@@ -1,0 +1,24 @@
+Создайте тестовый файл для проверки работы .htaccess:
+
+# 1. Создайте тестовый PHP файл
+sudo tee /ssd/www/videoeditor/public/test.php << 'EOF'
+<?php
+echo "TEST OK\n";
+echo "REQUEST_URI: " . ($_SERVER['REQUEST_URI'] ?? 'NOT SET') . "\n";
+echo "SCRIPT_NAME: " . ($_SERVER['SCRIPT_NAME'] ?? 'NOT SET') . "\n";
+echo "PHP_SELF: " . ($_SERVER['PHP_SELF'] ?? 'NOT SET') . "\n";
+phpinfo();
+EOF
+
+# 2. Установите права
+sudo chmod 644 /ssd/www/videoeditor/public/test.php
+sudo chown www-data:www-data /ssd/www/videoeditor/public/test.php
+
+# 3. Откройте в браузере:
+# https://videoeditor.1tlt.ru/test.php
+
+# 4. Проверьте что index.php работает напрямую:
+# https://videoeditor.1tlt.ru/index.php
+
+# 5. Проверьте что /login обрабатывается:
+# https://videoeditor.1tlt.ru/login?debug=1

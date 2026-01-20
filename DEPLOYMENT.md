@@ -6,7 +6,10 @@
 
 ```bash
 sudo apt update
-sudo apt install -y php8.1-fpm php8.1-mysql php8.1-gd php8.1-mbstring php8.1-zip nginx mysql-server ffmpeg git composer
+sudo apt install -y php8.1-fpm php8.1-mysql php8.1-mbstring apache2 libapache2-mod-php8.1 mysql-server ffmpeg git composer
+
+# Optional: Install GD for image overlay buttons
+# sudo apt install -y php8.1-gd
 ```
 
 ### 2. Configure MySQL
@@ -59,13 +62,16 @@ sudo chmod -R 755 /ssd/www/videoeditor
 sudo chmod -R 775 /ssd/www/videoeditor/storage
 ```
 
-### 8. Configure Nginx
+### 8. Configure Apache
 
 ```bash
-sudo cp config/nginx.conf /etc/nginx/sites-available/videoeditor
-sudo ln -s /etc/nginx/sites-available/videoeditor /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+sudo a2enmod rewrite php8.1 expires deflate
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+sudo nano /etc/apache2/sites-available/videoeditor.conf  # Update ServerName to videoeditor.1tlt.ru
+sudo a2ensite videoeditor.conf
+sudo a2dissite 000-default.conf
+sudo apache2ctl configtest
+sudo systemctl restart apache2
 ```
 
 ### 9. Setup Worker Service
@@ -99,7 +105,7 @@ bash scripts/deploy.sh
 ## Post-Deployment
 
 1. **Change Admin Password**: Login with default credentials and change immediately
-2. **Configure Domain**: Update Nginx config with your domain name
+2. **Configure Domain**: Update Apache config with domain name (videoeditor.1tlt.ru)
 3. **SSL Certificate**: Install Let's Encrypt certificate
 4. **Firewall**: Configure UFW to allow only necessary ports
 5. **Backup**: Set up automated backups for database and storage
@@ -108,7 +114,7 @@ bash scripts/deploy.sh
 
 - Check worker status: `sudo systemctl status video-worker`
 - View worker logs: `sudo journalctl -u video-worker -f`
-- Check Nginx logs: `sudo tail -f /var/log/nginx/videoeditor-error.log`
+- Check Apache logs: `sudo tail -f /var/log/apache2/videoeditor_error.log`
 - Monitor queue: Check admin dashboard
 
 ## Troubleshooting
@@ -120,7 +126,7 @@ bash scripts/deploy.sh
 - Check permissions on storage directories: `ls -la /ssd/www/videoeditor/storage`
 
 ### Upload Failures
-- Check Nginx `client_max_body_size`
+- Check Apache `LimitRequestBody` in config/apache.conf
 - Check PHP `upload_max_filesize` and `post_max_size`
 - Verify storage directory permissions
 

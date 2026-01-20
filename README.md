@@ -15,9 +15,13 @@ Automated video processing platform for adding motivational CTAs (Subscribe, Lik
 ## Requirements
 
 - Ubuntu 20.04+ VPS
-- PHP 8.1+ with extensions: pdo_mysql, gd, mbstring, zip
+- PHP 8.1+ with extensions:
+  - `php8.1-fpm` - PHP-FPM
+  - `php8.1-mysql` - MySQL support (PDO)
+  - `php8.1-mbstring` - String operations
+  - `php8.1-gd` - Optional - Image generation for overlay buttons (Subscribe/Like). Without GD, buttons use text overlays.
 - MySQL 8.0+
-- Nginx
+- Apache 2.4+ (or Nginx)
 - FFmpeg (installed and in PATH)
 - Git
 - Composer
@@ -29,7 +33,16 @@ Automated video processing platform for adding motivational CTAs (Subscribe, Lik
 ```bash
 # Install dependencies
 sudo apt update
-sudo apt install -y php8.1-fpm php8.1-mysql php8.1-gd php8.1-mbstring php8.1-zip nginx mysql-server ffmpeg git composer
+sudo apt install -y php8.1-fpm php8.1-mysql php8.1-mbstring apache2 libapache2-mod-php8.1 mysql-server ffmpeg git composer
+
+# Optional: Install GD for image overlay buttons
+# sudo apt install -y php8.1-gd
+
+# Verify PHP extensions
+php -m | grep -E "pdo_mysql|mbstring"
+
+# If extensions are missing, install them:
+# sudo apt install -y php8.1-gd php8.1-mbstring
 
 # Create directories
 sudo mkdir -p /ssd/www/videoeditor/{storage/{uploads,renders,logs,cache},public}
@@ -60,9 +73,32 @@ cp config/config.example.php config/config.php
 php scripts/migrate.php
 ```
 
-### 4. Nginx Configuration
+### 4. Apache Configuration
 
-See `config/nginx.conf` for Nginx virtual host configuration.
+```bash
+# Enable required modules
+sudo a2enmod rewrite
+sudo a2enmod php8.1
+sudo a2enmod expires
+sudo a2enmod deflate
+
+# Copy configuration
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+
+# Enable site
+sudo a2ensite videoeditor.conf
+
+# Disable default site (optional)
+sudo a2dissite 000-default.conf
+
+# Test configuration
+sudo apache2ctl configtest
+
+# Restart Apache
+sudo systemctl restart apache2
+```
+
+See `config/apache.conf` for Apache virtual host configuration.
 
 ### 5. Worker Setup
 
@@ -123,6 +159,28 @@ php scripts/worker.php  # Run worker manually
 - **SECURITY.md** - Security documentation
 - **PROJECT_STRUCTURE.md** - Project organization
 - **IMPLEMENTATION_SUMMARY.md** - Implementation overview
+
+## Recent Updates
+
+- **2024**: Fixed Composer dependencies - removed hard PHP extension requirements
+- **2024**: Added PHP extension installation guide (`INSTALL_PHP_EXTENSIONS.md`)
+- **2024**: Added extension checks in FFmpegService with helpful error messages
+- Multi-language support (English, Russian, Thai, Chinese)
+- Repository: https://github.com/alexevil1979/videoeditor
+- Server path: `/ssd/www/videoeditor`
+
+## ⚠️ Important: PHP Extensions Required
+
+Before installing Composer dependencies, ensure required PHP extensions are installed:
+```bash
+sudo apt install -y php8.1-mbstring php8.1-mysql
+php -m | grep -E "mbstring|pdo_mysql"  # Verify
+
+# Optional: Install GD for image overlay buttons
+# sudo apt install -y php8.1-gd
+```
+
+See `INSTALL_PHP_EXTENSIONS.md` for detailed instructions.
 
 ## License
 

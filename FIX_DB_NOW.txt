@@ -1,0 +1,29 @@
+Выполните на сервере:
+
+1. Проверьте какие таблицы есть:
+mysql -u video_user -p video_overlay -e "SHOW TABLES;"
+
+2. Если таблиц нет или их мало, импортируйте схему напрямую:
+cd /ssd/www/videoeditor
+mysql -u video_user -p video_overlay < database/schema.sql
+
+3. Проверьте снова:
+mysql -u video_user -p video_overlay -e "SHOW TABLES;"
+
+Должны быть таблицы:
+- users
+- user_profiles
+- balances
+- balance_transactions
+- videos
+- presets
+- preset_items
+- render_jobs
+- system_settings
+- logs
+
+4. Если таблица render_jobs все еще не существует, проверьте ошибки:
+mysql -u video_user -p video_overlay < database/schema.sql 2>&1 | grep -i error
+
+5. Перезапустите воркер:
+sudo systemctl restart video-worker

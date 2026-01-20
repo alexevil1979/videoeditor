@@ -1,0 +1,54 @@
+# Apache .htaccess для Video Editor
+
+# Включить mod_rewrite
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+    
+    # Отладка (временно)
+    # RewriteLog /var/log/apache2/rewrite.log
+    # RewriteLogLevel 3
+    
+    # Перенаправление на index.php если файл не существует
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# Если mod_rewrite не доступен, используем FallbackResource
+<IfModule !mod_rewrite.c>
+    FallbackResource /index.php
+</IfModule>
+
+# Защита от прямого доступа к файлам
+<FilesMatch "\.(htaccess|htpasswd|ini|log|sh|sql|md|php~)$">
+    Require all denied
+</FilesMatch>
+
+# Защита директорий
+<DirectoryMatch "^.*/\.(svn|git|hg|bzr)">
+    Require all denied
+</DirectoryMatch>
+
+# Кэширование статических файлов
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpeg "access plus 1 year"
+    ExpiresByType image/png "access plus 1 year"
+    ExpiresByType image/gif "access plus 1 year"
+    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+</IfModule>
+
+# Сжатие
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Максимальный размер загрузки
+# Примечание: php_value не работает с PHP-FPM через mod_proxy_fcgi
+# Настройте эти параметры в php.ini или pool.d/www.conf
+# php_value upload_max_filesize 100M
+# php_value post_max_size 100M
+# php_value max_execution_time 300
+# php_value memory_limit 512M

@@ -1,0 +1,28 @@
+Выполните на сервере ПРЯМО СЕЙЧАС:
+
+# 1. Проверьте какие таблицы есть
+mysql -u video_user -p video_overlay -e "SHOW TABLES;"
+
+# 2. Если таблиц нет, импортируйте схему напрямую
+cd /ssd/www/videoeditor
+mysql -u video_user -p video_overlay < database/schema.sql
+
+# 3. Проверьте снова
+mysql -u video_user -p video_overlay -e "SHOW TABLES;"
+
+# Должны быть таблицы:
+# users, user_profiles, balances, balance_transactions, videos, presets, preset_items, render_jobs, system_settings, logs
+
+# 4. Если таблицы все еще не созданы, проверьте ошибки
+mysql -u video_user -p video_overlay < database/schema.sql 2>&1 | grep -i error
+
+# 5. Если проблема с FOREIGN KEY, выполните в MySQL:
+mysql -u video_user -p video_overlay
+# SET FOREIGN_KEY_CHECKS = 0;
+# SOURCE /ssd/www/videoeditor/database/schema.sql;
+# SET FOREIGN_KEY_CHECKS = 1;
+# SHOW TABLES;
+# EXIT;
+
+# 6. Перезапустите воркер
+sudo systemctl restart video-worker

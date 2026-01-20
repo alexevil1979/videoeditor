@@ -1,0 +1,25 @@
+РЕШЕНИЕ ПРОБЛЕМЫ С POWERSHELL:
+
+Проблема: PowerShell плохо работает с кириллицей в путях.
+
+Решение: Используйте CMD (командную строку) вместо PowerShell.
+
+КАК ОТКРЫТЬ CMD:
+1. Нажмите Win+R
+2. Введите: cmd
+3. Нажмите Enter
+
+ИЛИ:
+1. Нажмите Win+X
+2. Выберите "Командная строка" или "Windows PowerShell" -> "Командная строка"
+
+ЗАТЕМ ВЫПОЛНИТЕ:
+cd "C:\Users\1\Documents\обработка видео"
+git add -A
+git commit -m "Add: Enhanced debugging and logging for routing issues"
+git push origin main
+
+ИЛИ ПРОСТО:
+Двойной клик по файлу: git-push-now.bat
+
+Этот bat-файл использует CMD и работает с кириллицей.

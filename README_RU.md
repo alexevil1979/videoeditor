@@ -15,12 +15,38 @@
 ## Требования
 
 - VPS Ubuntu 20.04+
-- PHP 8.1+ с расширениями: pdo_mysql, gd, mbstring, zip
+- PHP 8.1+ с расширениями:
+  - `php8.1-fpm` - PHP-FPM
+  - `php8.1-mysql` - Поддержка MySQL (PDO)
+  - `php8.1-mbstring` - Операции со строками
+  - `php8.1-gd` - Опционально - Генерация изображений для кнопок наложений (Subscribe/Like). Без GD кнопки используют текстовые наложения.
 - MySQL 8.0+
-- Nginx
+- Apache 2.4+ (или Nginx)
 - FFmpeg (установлен и в PATH)
 - Git
 - Composer
+
+## ⚠️ Важно: PHP расширения
+
+Перед установкой зависимостей Composer убедитесь что установлены необходимые PHP расширения:
+```bash
+sudo apt install -y php8.1-mbstring php8.1-mysql
+php -m | grep -E "mbstring|pdo_mysql"  # Проверка
+
+# Опционально: Установите GD для кнопок наложений
+# sudo apt install -y php8.1-gd
+```
+
+**Примечание**: Если Composer выдает ошибку о недостающих расширениях, см. `INSTALL_PHP_EXTENSIONS.md`
+
+## Последние обновления
+
+- **2024**: Исправлены зависимости Composer - убраны жесткие требования к расширениям PHP
+- **2024**: Добавлено руководство по установке расширений PHP (`INSTALL_PHP_EXTENSIONS.md`)
+- **2024**: Добавлены проверки расширений в FFmpegService с понятными сообщениями об ошибках
+- Поддержка мультиязычности (Английский, Русский, Тайский, Китайский)
+- Репозиторий: https://github.com/alexevil1979/videoeditor
+- Путь на сервере: `/ssd/www/videoeditor`
 
 ## Установка
 
@@ -29,7 +55,17 @@
 ```bash
 # Установка зависимостей
 sudo apt update
-sudo apt install -y php8.1-fpm php8.1-mysql php8.1-gd php8.1-mbstring php8.1-zip nginx mysql-server ffmpeg git composer
+sudo apt install -y php8.1-fpm php8.1-mysql php8.1-mbstring apache2 libapache2-mod-php8.1 mysql-server ffmpeg git composer
+
+# Опционально: Установите GD для кнопок наложений
+# sudo apt install -y php8.1-gd
+
+# Проверьте установленные расширения PHP
+php -m | grep -E "pdo_mysql|mbstring"
+
+# Если расширения отсутствуют, установите их:
+# sudo apt install -y php8.1-gd php8.1-mbstring
+# sudo systemctl restart php8.1-fpm
 
 # Создание директорий
 sudo mkdir -p /ssd/www/videoeditor/{storage/{uploads,renders,logs,cache},public}
@@ -60,9 +96,32 @@ cp config/config.example.php config/config.php
 php scripts/migrate.php
 ```
 
-### 4. Конфигурация Nginx
+### 4. Конфигурация Apache
 
-См. `config/nginx.conf` для конфигурации виртуального хоста Nginx.
+```bash
+# Включите необходимые модули
+sudo a2enmod rewrite
+sudo a2enmod php8.1
+sudo a2enmod expires
+sudo a2enmod deflate
+
+# Скопируйте конфигурацию
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+
+# Включите сайт
+sudo a2ensite videoeditor.conf
+
+# Отключите сайт по умолчанию (опционально)
+sudo a2dissite 000-default.conf
+
+# Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# Перезапустите Apache
+sudo systemctl restart apache2
+```
+
+См. `config/apache.conf` для конфигурации виртуального хоста Apache.
 
 ### 5. Настройка воркера
 
@@ -123,6 +182,7 @@ php scripts/worker.php  # Запуск воркера вручную
 - **SECURITY_RU.md** - Документация по безопасности
 - **PROJECT_STRUCTURE_RU.md** - Организация проекта
 - **IMPLEMENTATION_SUMMARY_RU.md** - Обзор реализации
+- **INSTALL_PHP_EXTENSIONS.md** - Руководство по установке PHP расширений
 
 ## Лицензия
 

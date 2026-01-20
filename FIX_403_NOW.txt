@@ -1,0 +1,34 @@
+Выполните на сервере ПРЯМО СЕЙЧАС для исправления 403 Forbidden:
+
+# 1. Установите правильные права доступа
+sudo chown -R www-data:www-data /ssd/www/videoeditor
+sudo chmod -R 755 /ssd/www/videoeditor
+sudo chmod -R 775 /ssd/www/videoeditor/storage
+sudo chmod -R 755 /ssd/www/videoeditor/public
+
+# 2. Проверьте что index.php существует и имеет правильные права
+ls -la /ssd/www/videoeditor/public/index.php
+sudo chmod 644 /ssd/www/videoeditor/public/index.php
+
+# 3. Проверьте что .htaccess существует
+ls -la /ssd/www/videoeditor/public/.htaccess
+sudo chmod 644 /ssd/www/videoeditor/public/.htaccess
+
+# 4. Проверьте конфигурацию Apache
+sudo apache2ctl configtest
+
+# 5. Проверьте что Directory настроен правильно
+sudo grep -A 5 "Directory /ssd/www/videoeditor/public" /etc/apache2/sites-available/videoeditor.conf
+
+# 6. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 7. Проверьте PHP-FPM
+sudo systemctl restart php8.1-fpm
+sudo systemctl status php8.1-fpm
+
+# 8. Проверьте логи
+sudo tail -30 /var/log/apache2/videoeditor_ssl_error.log
+
+# 9. Проверьте в браузере
+# https://videoeditor.1tlt.ru

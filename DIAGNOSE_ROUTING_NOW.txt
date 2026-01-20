@@ -1,0 +1,48 @@
+Выполните на сервере для диагностики проблемы с маршрутизацией:
+
+# 1. Проверьте что .htaccess действительно применяется
+sudo cat /ssd/www/videoeditor/public/.htaccess
+
+# 2. Проверьте права на .htaccess
+ls -la /ssd/www/videoeditor/public/.htaccess
+
+# 3. Проверьте что AllowOverride All настроен в Apache
+sudo grep -A 5 "Directory /ssd/www/videoeditor/public" /etc/apache2/sites-available/videoeditor.conf
+
+# 4. Проверьте логи Apache (самое важное!)
+sudo tail -50 /var/log/apache2/videoeditor_ssl_error.log
+sudo tail -50 /var/log/apache2/error.log
+
+# 5. Проверьте что index.php существует и доступен
+ls -la /ssd/www/videoeditor/public/index.php
+
+# 6. Попробуйте открыть index.php напрямую
+curl -I https://videoeditor.1tlt.ru/index.php
+
+# 7. Проверьте что vendor/autoload.php существует
+ls -la /ssd/www/videoeditor/vendor/autoload.php
+
+# 8. Проверьте права на всю директорию
+ls -la /ssd/www/videoeditor/public/
+
+# 9. Проверьте что PHP-FPM работает
+sudo systemctl status php8.1-fpm
+
+# 10. Включите отладку в Apache (временно)
+# Добавьте в /etc/apache2/sites-available/videoeditor.conf в секцию <Directory>:
+# LogLevel rewrite:trace6
+# Затем перезапустите Apache и проверьте логи
+
+# 11. Проверьте что запрос доходит до index.php
+# Создайте тестовый файл:
+echo "<?php echo 'TEST: ' . \$_SERVER['REQUEST_URI']; ?>" | sudo tee /ssd/www/videoeditor/public/test.php
+# Откройте: https://videoeditor.1tlt.ru/test.php
+# Должно показать REQUEST_URI
+
+# 12. Проверьте что .htaccess читается Apache
+# Временно переименуйте .htaccess и создайте простой:
+sudo mv /ssd/www/videoeditor/public/.htaccess /ssd/www/videoeditor/public/.htaccess.bak
+sudo echo "RewriteEngine On
+RewriteRule ^login$ index.php [L]" | sudo tee /ssd/www/videoeditor/public/.htaccess
+sudo systemctl restart apache2
+# Проверьте: https://videoeditor.1tlt.ru/login

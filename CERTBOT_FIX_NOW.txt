@@ -1,0 +1,51 @@
+Выполните на сервере ПРЯМО СЕЙЧАС:
+
+# Certbot не может автоматически настроить, потому что в конфигурации уже есть HTTPS VirtualHost
+# Используем ручную настройку:
+
+# 1. Убедитесь что сертификат получен (уже есть)
+sudo certbot certificates
+
+# 2. Обновите конфигурацию Apache из репозитория
+cd /ssd/www/videoeditor
+git pull origin main
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+
+# 3. Включите необходимые модули
+sudo a2enmod ssl
+sudo a2enmod rewrite
+sudo a2enmod proxy
+sudo a2enmod proxy_fcgi
+
+# 4. Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# 5. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 6. Проверьте статус
+sudo systemctl status apache2
+
+# 7. Установите правильные права доступа (ВАЖНО для исправления 403)
+sudo chown -R www-data:www-data /ssd/www/videoeditor
+sudo chmod -R 755 /ssd/www/videoeditor
+sudo chmod -R 775 /ssd/www/videoeditor/storage
+sudo chmod -R 755 /ssd/www/videoeditor/public
+sudo chmod 644 /ssd/www/videoeditor/public/index.php
+sudo chmod 644 /ssd/www/videoeditor/public/.htaccess
+
+# 8. Проверьте PHP-FPM
+sudo systemctl restart php8.1-fpm
+sudo systemctl status php8.1-fpm
+
+# 9. Проверьте логи (если все еще 403)
+sudo tail -30 /var/log/apache2/videoeditor_ssl_error.log
+
+# 10. Проверьте в браузере
+# https://videoeditor.1tlt.ru - должен быть зеленый замочек
+# http://videoeditor.1tlt.ru - должен редиректить на HTTPS
+
+# 11. Обновите config.php для HTTPS
+cd /ssd/www/videoeditor
+nano config/config.php
+# Измените: 'url' => 'https://videoeditor.1tlt.ru'

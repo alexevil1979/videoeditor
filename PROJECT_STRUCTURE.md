@@ -111,7 +111,7 @@ All configuration is in `config/config.php`. For production, consider moving sen
 
 ## Dependencies
 
-- PHP 8.1+ with extensions: pdo_mysql, gd, mbstring, zip
+- PHP 8.1+ with extensions: pdo_mysql, mbstring (gd optional for image buttons)
 - MySQL 8.0+
 - Nginx
 - FFmpeg

@@ -111,7 +111,7 @@ chmod 775 -R /ssd/www/videoeditor/storage
 
 ## Зависимости
 
-- PHP 8.1+ с расширениями: pdo_mysql, gd, mbstring, zip
+- PHP 8.1+ с расширениями: pdo_mysql, mbstring (gd опционально для кнопок)
 - MySQL 8.0+
 - Nginx
 - FFmpeg

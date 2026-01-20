@@ -1,0 +1,24 @@
+ВЫПОЛНИТЕ НА ЛОКАЛЬНОЙ МАШИНЕ (Windows):
+
+Вариант 1 - Двойной клик по файлу:
+- Откройте файл: git-push-now.bat
+- Двойной клик по нему
+
+Вариант 2 - Вручную в командной строке:
+
+1. Откройте командную строку (cmd)
+2. Выполните:
+
+cd "C:\Users\1\Documents\обработка видео"
+git add -A
+git commit -m "Add: Enhanced debugging and logging for routing issues"
+git push origin main
+
+3. После успешного push, на сервере выполните:
+
+cd /ssd/www/videoeditor
+git pull origin main
+grep "REQUEST_URI" public/index.php
+grep "Router dispatch" app/Core/Router.php
+
+Если grep находит строки - изменения применены!
