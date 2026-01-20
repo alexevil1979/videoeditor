@@ -51,7 +51,16 @@ while (true) {
 
         // Process video
         $startTime = time();
-        $result = $ffmpegService->processVideo($jobId, $videoId, $presetId);
+        try {
+            $result = $ffmpegService->processVideo($jobId, $videoId, $presetId);
+        } catch (\Exception $e) {
+            $result = [
+                'success' => false,
+                'message' => 'Exception during processing: ' . $e->getMessage(),
+                'error' => $e->getTraceAsString(),
+            ];
+            echo "EXCEPTION: " . $e->getMessage() . "\n";
+        }
 
         if ($result['success']) {
             // Update job as completed
@@ -104,10 +113,16 @@ while (true) {
                     'worker_id' => null,
                 ]);
                 echo "Job #{$jobId} failed, will retry (attempt {$retryCount}/{$maxRetries})\n";
-                echo "Error: {$errorMessage}\n";
+                echo "=== ERROR DETAILS ===\n";
+                echo "Message: {$errorMessage}\n";
                 if ($errorDetails) {
-                    echo "Details: " . substr($errorDetails, 0, 200) . "...\n";
+                    echo "FFmpeg Output:\n";
+                    echo substr($errorDetails, 0, 500) . "\n";
+                    if (strlen($errorDetails) > 500) {
+                        echo "... (truncated, see logs for full output)\n";
+                    }
                 }
+                echo "=====================\n";
             } else {
                 // Max retries reached
                 RenderJob::update($jobId, [
@@ -116,10 +131,17 @@ while (true) {
                     'worker_id' => null,
                 ]);
                 echo "Job #{$jobId} failed permanently\n";
-                echo "Error: {$errorMessage}\n";
+                echo "=== ERROR DETAILS ===\n";
+                echo "Message: {$errorMessage}\n";
                 if ($errorDetails) {
-                    echo "Details: " . substr($errorDetails, 0, 200) . "...\n";
+                    echo "FFmpeg Output:\n";
+                    echo substr($errorDetails, 0, 500) . "\n";
+                    if (strlen($errorDetails) > 500) {
+                        echo "... (truncated, see logs for full output)\n";
+                    }
                 }
+                echo "=====================\n";
+                echo "Full error saved to: /ssd/www/videoeditor/storage/logs/worker_errors.log\n";
             }
         }
 
