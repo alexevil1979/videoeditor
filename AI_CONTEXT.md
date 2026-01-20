@@ -187,8 +187,9 @@ videoeditor/
 4. ✅ Создан скрипт scripts/create-admin.php для создания администратора
 
 ### Git workflow:
-- После любых изменений создавать bat-файл для деплоя
-- Пользователь запускает bat-файл двойным кликом
+- После любых изменений **ВСЕГДА использовать PowerShell** для деплоя
+- Использовать скрипт `deploy-fixes-final.ps1` или создать новый PowerShell скрипт
+- Выполнять: `powershell -ExecutionPolicy Bypass -File deploy-fixes-final.ps1`
 - На сервере выполнять `git pull origin main`
 
 ### Apache конфигурация:
@@ -219,9 +220,16 @@ videoeditor/
 ## Инструкции для деплоя:
 
 ### На локальной машине:
-1. Запустить `deploy-fixes-final.bat` (двойной клик)
-2. Или вручную:
-   ```bash
+**ВАЖНО: Всегда использовать PowerShell для деплоя!**
+
+1. Запустить PowerShell скрипт:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File deploy-fixes-final.ps1
+   ```
+2. Или вручную через PowerShell:
+   ```powershell
+   git add -A
+   git commit -m "Описание изменений"
    git push origin main
    ```
 
