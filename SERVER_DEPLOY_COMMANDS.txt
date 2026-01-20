@@ -2,51 +2,50 @@
 КОМАНДЫ ДЛЯ ПРИМЕНЕНИЯ НА СЕРВЕРЕ
 ========================================
 Дата: 2024-12-19
-Изменения: Добавлено расширенное логирование для диагностики
+Изменения: Добавлен скрипт для запуска воркера с проверками
 
 1. Обновить код из Git:
    cd /ssd/www/videoeditor
    git pull origin main
 
-2. Создать директорию логов:
+2. Сделать скрипт запуска исполняемым:
+   chmod +x /ssd/www/videoeditor/scripts/start-worker.sh
+
+3. Создать директорию логов:
    mkdir -p /ssd/www/videoeditor/storage/logs
    chmod 775 /ssd/www/videoeditor/storage/logs
 
-3. Проверить права доступа:
+4. Проверить права доступа:
    sudo chown -R www-data:www-data /ssd/www/videoeditor
    sudo chmod -R 755 /ssd/www/videoeditor
    sudo chmod -R 775 /ssd/www/videoeditor/storage
 
-4. Проверить что FFmpeg установлен:
-   ffmpeg -version
-   which ffmpeg
-
-5. Перезапустить воркер:
+5. Запустить воркер (новый способ):
+   /ssd/www/videoeditor/scripts/start-worker.sh
+   
+   Или старый способ:
    cd /ssd/www/videoeditor
    php scripts/worker.php
-   
-   # Теперь воркер выведет МНОГО отладочной информации!
 
-6. Создать новую задачу и смотреть вывод воркера:
-   - Воркер покажет каждый шаг обработки
-   - Покажет детали ошибки FFmpeg
-   - Покажет длину сообщений об ошибках
-
-7. Проверить логи PHP (если нужно):
-   tail -f /ssd/www/videoeditor/storage/logs/php_errors.log
+6. Скрипт автоматически проверит:
+   - Наличие PHP
+   - Наличие FFmpeg
+   - Права доступа к логам
+   - Память и дисковое пространство
 
 ========================================
-ВАЖНО: Проверьте память сервера!
+БЫСТРАЯ КОМАНДА (все в одной строке):
 ========================================
-Если воркер убивается (Killed), возможно нехватка памяти.
+cd /ssd/www/videoeditor && git pull origin main && chmod +x scripts/start-worker.sh && mkdir -p storage/logs && sudo chown -R www-data:www-data /ssd/www/videoeditor && sudo chmod -R 755 /ssd/www/videoeditor && sudo chmod -R 775 /ssd/www/videoeditor/storage
 
-Проверьте:
-free -h
-df -h
+========================================
+ЗАПУСК ВОРКЕРА:
+========================================
+Новый способ (с проверками):
+/ssd/www/videoeditor/scripts/start-worker.sh
 
-Если памяти мало, попробуйте:
-- Увеличить swap
-- Обработать более короткие видео
-- Уменьшить разрешение вывода в config.php
+Старый способ:
+cd /ssd/www/videoeditor
+php scripts/worker.php
 
 ========================================
