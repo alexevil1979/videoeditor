@@ -143,7 +143,13 @@ ob_start();
                                 <td><?= date('Y-m-d H:i', strtotime($job['created_at'])) ?></td>
                                 <td>
                                     <?php if ($job['status'] === 'completed'): ?>
-                                        <a href="/api/videos/download/<?= $job['id'] ?>" class="btn btn-sm btn-success"><?= Lang::get('dashboard.download') ?></a>
+                                        <a href="/api/videos/download/<?= $job['id'] ?>" class="btn btn-sm btn-success" download>Скачать видео</a>
+                                    <?php elseif ($job['status'] === 'processing'): ?>
+                                        <span class="badge badge-info">Обрабатывается...</span>
+                                    <?php elseif ($job['status'] === 'pending'): ?>
+                                        <span class="badge badge-warning">Ожидает обработки</span>
+                                    <?php elseif ($job['status'] === 'failed'): ?>
+                                        <span class="badge badge-danger">Ошибка</span>
                                     <?php endif; ?>
                                 </td>
                             </tr>
