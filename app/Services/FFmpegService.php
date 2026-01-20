@@ -119,7 +119,35 @@ class FFmpegService
             error_log("FFmpegService: Processing failed - returnCode={$returnCode}, outputExists=" . (file_exists($outputPath) ? 'yes' : 'no'));
             error_log("FFmpegService: Error output length=" . strlen($errorOutput));
             
-            // If no output, try to get more info
+            // Extract actual error message (skip version info)
+            $actualError = '';
+            $foundError = false;
+            foreach ($output as $line) {
+                // Skip version and configuration lines
+                if (strpos($line, 'ffmpeg version') !== false || 
+                    strpos($line, 'built with') !== false || 
+                    strpos($line, 'configuration:') !== false ||
+                    strpos($line, 'lib') !== false && strpos($line, 'enable-') !== false) {
+                    continue;
+                }
+                // Start capturing from first error-like line
+                if (stripos($line, 'error') !== false || 
+                    stripos($line, 'failed') !== false || 
+                    stripos($line, 'invalid') !== false ||
+                    stripos($line, 'unable') !== false ||
+                    stripos($line, 'no such') !== false ||
+                    $foundError) {
+                    $foundError = true;
+                    $actualError .= $line . "\n";
+                }
+            }
+            
+            // If no actual error found, use all output
+            if (empty($actualError)) {
+                $actualError = $errorOutput;
+            }
+            
+            // If still no output, try to get more info
             if (empty($errorOutput)) {
                 $errorOutput = "FFmpeg returned code {$returnCode} but produced no output.\n";
                 $errorOutput .= "Input file: {$inputPath}\n";
@@ -128,12 +156,13 @@ class FFmpegService
                 $errorOutput .= "Output dir exists: " . (is_dir($outputDir) ? 'yes' : 'no') . "\n";
                 $errorOutput .= "Output dir writable: " . (is_writable($outputDir) ? 'yes' : 'no') . "\n";
                 $errorOutput .= "Command: {$command}\n";
+                $actualError = $errorOutput;
             }
             
             return [
                 'success' => false,
                 'message' => 'FFmpeg processing failed',
-                'error' => $errorOutput,
+                'error' => $actualError ?: $errorOutput,
             ];
         }
 
