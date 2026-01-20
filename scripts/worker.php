@@ -95,12 +95,19 @@ while (true) {
             }
             
             // Log error to file
-            $logFile = __DIR__ . '/../storage/logs/worker_errors.log';
-            $logDir = dirname($logFile);
+            $logDir = __DIR__ . '/../storage/logs';
             if (!is_dir($logDir)) {
-                mkdir($logDir, 0755, true);
+                if (!mkdir($logDir, 0755, true)) {
+                    echo "Warning: Cannot create logs directory: {$logDir}\n";
+                }
             }
-            error_log("Job #{$jobId} failed: {$fullError}\n", 3, $logFile);
+            
+            if (is_dir($logDir) && is_writable($logDir)) {
+                $logFile = $logDir . '/worker_errors.log';
+                error_log("Job #{$jobId} failed: {$fullError}\n", 3, $logFile);
+            } else {
+                echo "Warning: Cannot write to logs directory: {$logDir}\n";
+            }
             
             $retryCount = $job['retry_count'] + 1;
             

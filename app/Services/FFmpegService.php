@@ -79,12 +79,18 @@ class FFmpegService
         $command = $this->buildFFmpegCommand($inputPath, $outputPath, $presetItems, $video);
         
         // Log command for debugging
-        $logFile = Config::get('storage.logs') . '/ffmpeg_commands.log';
-        $logDir = dirname($logFile);
-        if (!is_dir($logDir)) {
-            mkdir($logDir, 0755, true);
+        $logsDir = Config::get('storage.logs');
+        if (!is_dir($logsDir)) {
+            if (!mkdir($logsDir, 0755, true)) {
+                // If we can't create logs dir, continue without logging
+                error_log("Warning: Cannot create logs directory: {$logsDir}");
+            }
         }
-        error_log("Job #{$jobId} FFmpeg command: {$command}\n", 3, $logFile);
+        
+        if (is_dir($logsDir) && is_writable($logsDir)) {
+            $logFile = $logsDir . '/ffmpeg_commands.log';
+            error_log("Job #{$jobId} FFmpeg command: {$command}\n", 3, $logFile);
+        }
 
         // Execute
         $startTime = time();
@@ -94,7 +100,10 @@ class FFmpegService
         exec($command . ' 2>&1', $output, $returnCode);
         
         // Log output for debugging
-        error_log("Job #{$jobId} FFmpeg output (code: {$returnCode}):\n" . implode("\n", $output) . "\n\n", 3, $logFile);
+        if (is_dir($logsDir) && is_writable($logsDir)) {
+            $logFile = $logsDir . '/ffmpeg_commands.log';
+            error_log("Job #{$jobId} FFmpeg output (code: {$returnCode}):\n" . implode("\n", $output) . "\n\n", 3, $logFile);
+        }
 
         if ($returnCode !== 0 || !file_exists($outputPath)) {
             $errorOutput = implode("\n", $output);
