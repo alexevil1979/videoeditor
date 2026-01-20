@@ -1,0 +1,47 @@
+ВЫПОЛНИТЕ НА СЕРВЕРЕ для исправления 500 ошибки:
+
+# 1. Сначала проверьте логи (чтобы понять точную причину)
+sudo tail -50 /var/log/apache2/videoeditor_ssl_error.log
+
+# 2. Уберите FallbackResource из конфигурации Apache
+sudo nano /etc/apache2/sites-available/videoeditor.conf
+
+# Найдите и УДАЛИТЕ строку:
+# FallbackResource /index.php
+
+# Должно остаться только:
+# <Directory /ssd/www/videoeditor/public>
+#     Options -Indexes +FollowSymLinks
+#     AllowOverride All
+#     Require all granted
+#     
+#     # PHP-FPM через mod_proxy_fcgi
+#     <FilesMatch \.php$>
+#         SetHandler "proxy:fcgi://127.0.0.1:9000"
+#     </FilesMatch>
+# </Directory>
+
+# Сохраните (Ctrl+O, Enter, Ctrl+X)
+
+# 3. Обновите .htaccess (уберем FallbackResource оттуда тоже)
+cd /ssd/www/videoeditor
+git pull origin main
+# Или вручную отредактируйте .htaccess и уберите строку: FallbackResource /index.php
+
+# 4. Убедитесь что mod_rewrite включен
+sudo a2enmod rewrite
+
+# 5. Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# 6. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 7. Проверьте что PHP-FPM работает
+sudo systemctl status php8.1-fpm
+
+# 8. Проверьте логи снова
+sudo tail -30 /var/log/apache2/videoeditor_ssl_error.log
+
+# 9. Проверьте в браузере:
+# https://videoeditor.1tlt.ru/login - должно работать!

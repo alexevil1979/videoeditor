@@ -1,0 +1,31 @@
+ВЫПОЛНИТЕ НА СЕРВЕРЕ для диагностики 500 ошибки:
+
+# 1. Проверьте логи Apache (самое важное!)
+sudo tail -50 /var/log/apache2/videoeditor_ssl_error.log
+sudo tail -50 /var/log/apache2/error.log
+
+# 2. Проверьте логи PHP-FPM
+sudo tail -50 /var/log/php8.1-fpm.log
+# или
+sudo tail -50 /var/log/php-fpm.log
+
+# 3. Проверьте что PHP-FPM запущен
+sudo systemctl status php8.1-fpm
+# или
+sudo systemctl status php-fpm
+
+# 4. Проверьте конфигурацию Apache
+sudo apache2ctl configtest
+
+# 5. Проверьте что FallbackResource правильно настроен
+sudo grep -A 10 "Directory /ssd/www/videoeditor/public" /etc/apache2/sites-available/videoeditor.conf
+
+# 6. Проверьте права на файлы
+ls -la /ssd/www/videoeditor/public/index.php
+ls -la /ssd/www/videoeditor/public/.htaccess
+
+# 7. Проверьте что vendor/autoload.php существует
+ls -la /ssd/www/videoeditor/vendor/autoload.php
+
+# 8. Попробуйте открыть index.php напрямую
+curl -I https://videoeditor.1tlt.ru/index.php

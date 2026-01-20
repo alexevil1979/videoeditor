@@ -1,0 +1,26 @@
+ВЫПОЛНИТЕ НА СЕРВЕРЕ для исправления конфликта Git:
+
+# Вариант 1: Сохранить локальные изменения и обновить (рекомендуется)
+cd /ssd/www/videoeditor
+git stash
+git pull origin main
+git stash pop
+
+# Если есть конфликты после stash pop, решите их вручную или:
+git stash drop  # Удалить локальные изменения если они не нужны
+
+# Вариант 2: Откатить локальные изменения и обновить (если локальные изменения не важны)
+cd /ssd/www/videoeditor
+git reset --hard HEAD
+git pull origin main
+
+# Вариант 3: Закоммитить локальные изменения и обновить
+cd /ssd/www/videoeditor
+git add -A
+git commit -m "Local server changes before merge"
+git pull origin main
+
+# После любого варианта обновите конфигурацию Apache:
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+sudo apache2ctl configtest
+sudo systemctl restart apache2

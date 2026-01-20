@@ -1,0 +1,10 @@
+САМЫЙ ПРОСТОЙ СПОСОБ (откатить локальные изменения):
+
+cd /ssd/www/videoeditor
+git reset --hard HEAD
+git pull origin main
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+sudo apache2ctl configtest
+sudo systemctl restart apache2
+
+Это откатит все локальные изменения и обновит из репозитория.

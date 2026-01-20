@@ -11,18 +11,10 @@
     RewriteRule ^(.*)$ index.php [QSA,L]
 </IfModule>
 
-# FallbackResource как резервный вариант (работает даже без mod_rewrite)
-FallbackResource /index.php
-
 # Защита от прямого доступа к файлам
 <FilesMatch "\.(htaccess|htpasswd|ini|log|sh|sql|md|php~)$">
     Require all denied
 </FilesMatch>
-
-# Защита директорий
-<DirectoryMatch "^.*/\.(svn|git|hg|bzr)">
-    Require all denied
-</DirectoryMatch>
 
 # Кэширование статических файлов
 <IfModule mod_expires.c>

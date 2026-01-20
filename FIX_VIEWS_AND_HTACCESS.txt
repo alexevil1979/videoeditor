@@ -1,0 +1,31 @@
+ВЫПОЛНИТЕ НА СЕРВЕРЕ для исправления ошибок:
+
+# 1. Обновите файлы из репозитория
+cd /ssd/www/videoeditor
+git reset --hard HEAD
+git pull origin main
+
+# 2. Проверьте что файлы исправлены
+grep "require.*layout" views/auth/login.php
+grep "require.*layout" views/auth/register.php
+# Должно быть: require __DIR__ . '/../layout.php';
+
+# 3. Проверьте что .htaccess исправлен (нет DirectoryMatch)
+grep -i "DirectoryMatch" public/.htaccess
+# Не должно быть вывода
+
+# 4. Обновите конфигурацию Apache (уберите FallbackResource если еще есть)
+sudo nano /etc/apache2/sites-available/videoeditor.conf
+# Убедитесь что нет строки: FallbackResource /index.php
+
+# 5. Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# 6. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 7. Проверьте логи
+sudo tail -30 /var/log/apache2/videoeditor_ssl_error.log
+
+# 8. Проверьте в браузере:
+# https://videoeditor.1tlt.ru/login - должно работать!
