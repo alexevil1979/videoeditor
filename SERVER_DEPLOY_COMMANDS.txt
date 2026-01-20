@@ -2,7 +2,7 @@
 КОМАНДЫ ДЛЯ ПРИМЕНЕНИЯ НА СЕРВЕРЕ
 ========================================
 Дата: 2024-12-19
-Изменения: Исправлено создание директории логов
+Изменения: Добавлен отладочный вывод для диагностики ошибок FFmpeg
 
 1. Обновить код из Git:
    cd /ssd/www/videoeditor
@@ -18,17 +18,20 @@
    sudo chmod -R 775 /ssd/www/videoeditor/storage
 
 4. Перезапустить воркер:
-   # Если воркер запущен вручную, остановите его (Ctrl+C)
-   # Затем запустите заново:
+   # Остановите текущий воркер (Ctrl+C если запущен вручную)
    cd /ssd/www/videoeditor
    php scripts/worker.php
+   
+   # Теперь воркер будет выводить отладочную информацию!
 
-5. Проверить ошибку из базы данных:
+5. Создать новую задачу рендеринга:
+   - Зайдите в Dashboard
+   - Выберите видео и пресет
+   - Нажмите Render
+   - Смотрите вывод воркера - там будут детали ошибки
+
+6. Проверить ошибку в базе данных (после новой задачи):
    mysql -u video_user -p video_overlay -e "SELECT id, error_message FROM render_jobs WHERE status='failed' ORDER BY id DESC LIMIT 1\G"
-
-6. Проверить логи (после перезапуска воркера):
-   tail -f /ssd/www/videoeditor/storage/logs/worker_errors.log
-   tail -f /ssd/www/videoeditor/storage/logs/ffmpeg_commands.log
 
 ========================================
 БЫСТРАЯ КОМАНДА (все в одной строке):
@@ -36,14 +39,15 @@
 cd /ssd/www/videoeditor && git pull origin main && mkdir -p storage/logs && sudo chown -R www-data:www-data /ssd/www/videoeditor && sudo chmod -R 755 /ssd/www/videoeditor && sudo chmod -R 775 /ssd/www/videoeditor/storage
 
 ========================================
-ВАЖНО: Проверьте ошибку в базе данных!
+ВАЖНО: Старые задачи не имеют деталей ошибок!
 ========================================
-Ошибка "FFmpeg processing failed" - это общее сообщение.
-Детали ошибки сохранены в базе данных в поле error_message.
+Задачи с ID 1-6 были созданы до обновления кода.
+Они имеют только общее сообщение "FFmpeg processing failed".
 
-Выполните:
-mysql -u video_user -p video_overlay -e "SELECT id, error_message FROM render_jobs WHERE status='failed' ORDER BY id DESC LIMIT 1\G"
-
-Это покажет полную ошибку FFmpeg с деталями!
+Для получения деталей ошибки:
+1. Примените обновления (git pull)
+2. Создайте НОВУЮ задачу рендеринга
+3. Воркер выведет детали ошибки в консоль
+4. Детали также сохранятся в базе данных
 
 ========================================
