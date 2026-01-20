@@ -2,7 +2,7 @@
 КОМАНДЫ ДЛЯ ПРИМЕНЕНИЯ НА СЕРВЕРЕ
 ========================================
 Дата: 2024-12-19
-Изменения: Улучшено логирование ошибок FFmpeg, добавлены проверки файлов
+Изменения: Улучшен вывод ошибок в консоль воркера для отладки
 
 1. Обновить код из Git:
    cd /ssd/www/videoeditor
@@ -16,60 +16,39 @@
 3. Очистить кэш (если используется):
    sudo rm -rf /ssd/www/videoeditor/storage/cache/*
 
-4. Перезапустить воркер (ВАЖНО):
-   sudo systemctl restart video-worker
-   
-   # Или если воркер не запущен как сервис:
-   # Остановить старый процесс воркера (если запущен вручную)
-   # Затем запустить заново:
+4. Перезапустить воркер:
+   # Если воркер запущен вручную, остановите его (Ctrl+C)
+   # Затем запустите заново:
    cd /ssd/www/videoeditor
    php scripts/worker.php
+   
+   # Теперь воркер будет выводить детальные ошибки в консоль!
 
-5. Проверить логи ошибок:
+5. Проверить логи ошибок (в другом терминале):
    # Логи воркера
    tail -f /ssd/www/videoeditor/storage/logs/worker_errors.log
    
    # Логи FFmpeg команд
    tail -f /ssd/www/videoeditor/storage/logs/ffmpeg_commands.log
-   
-   # Общие логи PHP
-   tail -f /ssd/www/videoeditor/storage/logs/php_errors.log
 
 6. Проверить ошибки в базе данных:
-   # Посмотреть последние failed задачи
    mysql -u video_user -p video_overlay -e "SELECT id, error_message FROM render_jobs WHERE status='failed' ORDER BY id DESC LIMIT 5;"
-
-7. Проверить работу сайта:
-   - Открыть: https://videoeditor.1tlt.ru/dashboard
-   - Войти в систему
-   - Создать новую задачу рендеринга
-   - Проверить логи воркера для диагностики
 
 ========================================
 БЫСТРАЯ КОМАНДА (все в одной строке):
 ========================================
-cd /ssd/www/videoeditor && git pull origin main && sudo chown -R www-data:www-data /ssd/www/videoeditor && sudo chmod -R 755 /ssd/www/videoeditor && sudo chmod -R 775 /ssd/www/videoeditor/storage && sudo systemctl restart video-worker
+cd /ssd/www/videoeditor && git pull origin main && sudo chown -R www-data:www-data /ssd/www/videoeditor && sudo chmod -R 755 /ssd/www/videoeditor && sudo chmod -R 775 /ssd/www/videoeditor/storage
 
 ========================================
-ДИАГНОСТИКА ОШИБОК РЕНДЕРИНГА:
+ВАЖНО: После обновления перезапустите воркер!
 ========================================
+Воркер теперь выводит детальные ошибки в консоль.
+Вы увидите:
+- Сообщение об ошибке
+- Вывод FFmpeg (первые 500 символов)
+- Путь к полному логу
 
-1. Проверить что FFmpeg установлен:
-   ffmpeg -version
-
-2. Проверить что файл видео существует:
-   ls -la /ssd/www/videoeditor/storage/uploads/
-
-3. Проверить права на файлы:
-   ls -la /ssd/www/videoeditor/storage/
-
-4. Проверить логи воркера в реальном времени:
-   tail -f /ssd/www/videoeditor/storage/logs/worker_errors.log
-
-5. Проверить последние ошибки FFmpeg:
-   tail -50 /ssd/www/videoeditor/storage/logs/ffmpeg_commands.log
-
-6. Проверить конкретную задачу в базе данных:
-   mysql -u video_user -p video_overlay -e "SELECT * FROM render_jobs WHERE id=3;"
+Для просмотра полного лога:
+tail -f /ssd/www/videoeditor/storage/logs/worker_errors.log
 
 ========================================
