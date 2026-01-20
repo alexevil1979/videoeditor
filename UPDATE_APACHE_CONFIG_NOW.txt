@@ -1,0 +1,38 @@
+ВЫПОЛНИТЕ НА СЕРВЕРЕ ПРЯМО СЕЙЧАС:
+
+# 1. Обновите файлы из репозитория
+cd /ssd/www/videoeditor
+git pull origin main
+
+# 2. Обновите конфигурацию Apache
+sudo cp config/apache.conf /etc/apache2/sites-available/videoeditor.conf
+
+# ИЛИ вручную добавьте FallbackResource в конфигурацию:
+sudo nano /etc/apache2/sites-available/videoeditor.conf
+
+# Добавьте в секцию <Directory /ssd/www/videoeditor/public>:
+# FallbackResource /index.php
+
+# Должно быть так:
+# <Directory /ssd/www/videoeditor/public>
+#     Options -Indexes +FollowSymLinks
+#     AllowOverride All
+#     Require all granted
+#     
+#     # FallbackResource для маршрутизации (работает даже без mod_rewrite)
+#     FallbackResource /index.php
+#     
+#     # PHP-FPM через mod_proxy_fcgi
+#     <FilesMatch \.php$>
+#         SetHandler "proxy:fcgi://127.0.0.1:9000"
+#     </FilesMatch>
+# </Directory>
+
+# 3. Проверьте конфигурацию
+sudo apache2ctl configtest
+
+# 4. Перезапустите Apache
+sudo systemctl restart apache2
+
+# 5. Проверьте в браузере:
+# https://videoeditor.1tlt.ru/login - должно работать!

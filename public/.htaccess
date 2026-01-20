@@ -5,20 +5,14 @@
     RewriteEngine On
     RewriteBase /
     
-    # Отладка (временно)
-    # RewriteLog /var/log/apache2/rewrite.log
-    # RewriteLogLevel 3
-    
     # Перенаправление на index.php если файл не существует
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^(.*)$ index.php [QSA,L]
 </IfModule>
 
-# Если mod_rewrite не доступен, используем FallbackResource
-<IfModule !mod_rewrite.c>
-    FallbackResource /index.php
-</IfModule>
+# FallbackResource как резервный вариант (работает даже без mod_rewrite)
+FallbackResource /index.php
 
 # Защита от прямого доступа к файлам
 <FilesMatch "\.(htaccess|htpasswd|ini|log|sh|sql|md|php~)$">
