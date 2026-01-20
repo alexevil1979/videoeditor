@@ -53,23 +53,35 @@ while (true) {
         $startTime = time();
         try {
             echo "Calling FFmpegService::processVideo()...\n";
+            flush();
             $result = $ffmpegService->processVideo($jobId, $videoId, $presetId);
+            flush();
             
             // Debug: show what we got
             echo "DEBUG: Result received\n";
+            flush();
             echo "DEBUG: success = " . ($result['success'] ? 'true' : 'false') . "\n";
+            flush();
+            
             if (!$result['success']) {
                 echo "DEBUG: FFmpegService returned error\n";
+                flush();
                 echo "DEBUG: message = " . ($result['message'] ?? 'NOT SET') . "\n";
-                $errorPreview = isset($result['error']) ? substr($result['error'], 0, 500) : 'NOT SET';
-                echo "DEBUG: error (first 500 chars) = " . $errorPreview . "\n";
-                if (isset($result['error']) && strlen($result['error']) > 500) {
+                flush();
+                
+                if (isset($result['error'])) {
+                    $errorPreview = substr($result['error'], 0, 500);
+                    echo "DEBUG: error (first 500 chars) = " . $errorPreview . "\n";
                     echo "DEBUG: error length = " . strlen($result['error']) . " characters\n";
+                } else {
+                    echo "DEBUG: error = NOT SET\n";
                 }
+                flush();
             }
         } catch (\Exception $e) {
             echo "EXCEPTION caught: " . $e->getMessage() . "\n";
             echo "EXCEPTION trace: " . $e->getTraceAsString() . "\n";
+            flush();
             $result = [
                 'success' => false,
                 'message' => 'Exception during processing: ' . $e->getMessage(),
@@ -100,12 +112,27 @@ while (true) {
             echo "Job #{$jobId} completed in {$processingTime}s\n";
         } else {
             // Handle failure - save detailed error message
+            echo "\n";
+            echo "========================================\n";
             echo "DEBUG: Processing failed, extracting error details...\n";
+            echo "========================================\n";
+            flush();
+            
             $errorMessage = $result['message'] ?? 'Processing failed';
             $errorDetails = $result['error'] ?? '';
             
             echo "DEBUG: errorMessage = {$errorMessage}\n";
+            flush();
+            echo "DEBUG: errorDetails exists = " . (isset($result['error']) ? 'YES' : 'NO') . "\n";
+            flush();
             echo "DEBUG: errorDetails length = " . strlen($errorDetails) . "\n";
+            flush();
+            
+            if ($errorDetails) {
+                echo "DEBUG: First 200 chars of error:\n";
+                echo substr($errorDetails, 0, 200) . "\n";
+                flush();
+            }
             
             // Combine error message and details
             $fullError = $errorMessage;
@@ -116,6 +143,8 @@ while (true) {
             }
             
             echo "DEBUG: fullError length = " . strlen($fullError) . "\n";
+            echo "DEBUG: About to save to database...\n";
+            flush();
             
             // Log error to file
             $logDir = __DIR__ . '/../storage/logs';
@@ -136,12 +165,17 @@ while (true) {
             
             if ($retryCount < $maxRetries) {
                 // Retry
-                RenderJob::update($jobId, [
+                echo "DEBUG: Updating job status to pending (retry)...\n";
+                flush();
+                $updateResult = RenderJob::update($jobId, [
                     'status' => 'pending',
                     'retry_count' => $retryCount,
                     'error_message' => $fullError,
                     'worker_id' => null,
                 ]);
+                echo "DEBUG: Update result = " . ($updateResult ? 'SUCCESS' : 'FAILED') . "\n";
+                flush();
+                
                 echo "Job #{$jobId} failed, will retry (attempt {$retryCount}/{$maxRetries})\n";
                 echo "=== ERROR DETAILS ===\n";
                 echo "Message: {$errorMessage}\n";
@@ -151,15 +185,23 @@ while (true) {
                     if (strlen($errorDetails) > 500) {
                         echo "... (truncated, see logs for full output)\n";
                     }
+                } else {
+                    echo "(No FFmpeg output available)\n";
                 }
                 echo "=====================\n";
+                flush();
             } else {
                 // Max retries reached
-                RenderJob::update($jobId, [
+                echo "DEBUG: Updating job status to failed (max retries)...\n";
+                flush();
+                $updateResult = RenderJob::update($jobId, [
                     'status' => 'failed',
                     'error_message' => $fullError,
                     'worker_id' => null,
                 ]);
+                echo "DEBUG: Update result = " . ($updateResult ? 'SUCCESS' : 'FAILED') . "\n";
+                flush();
+                
                 echo "Job #{$jobId} failed permanently\n";
                 echo "=== ERROR DETAILS ===\n";
                 echo "Message: {$errorMessage}\n";
@@ -169,9 +211,12 @@ while (true) {
                     if (strlen($errorDetails) > 500) {
                         echo "... (truncated, see logs for full output)\n";
                     }
+                } else {
+                    echo "(No FFmpeg output available)\n";
                 }
                 echo "=====================\n";
                 echo "Full error saved to: /ssd/www/videoeditor/storage/logs/worker_errors.log\n";
+                flush();
             }
         }
 
