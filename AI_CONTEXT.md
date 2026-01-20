@@ -190,7 +190,8 @@ videoeditor/
 - После любых изменений **ВСЕГДА использовать PowerShell** для деплоя
 - Использовать скрипт `deploy-fixes-final.ps1` или создать новый PowerShell скрипт
 - Выполнять: `powershell -ExecutionPolicy Bypass -File deploy-fixes-final.ps1`
-- На сервере выполнять `git pull origin main`
+- **ВАЖНО:** После каждой работы **ВСЕГДА создавать файл SERVER_DEPLOY_COMMANDS.txt** с командами для применения на сервере
+- На сервере выполнять команды из SERVER_DEPLOY_COMMANDS.txt
 
 ### Apache конфигурация:
 - Используется PHP-FPM через mod_proxy_fcgi
