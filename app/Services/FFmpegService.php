@@ -239,8 +239,11 @@ class FFmpegService
         $cmd .= " -crf " . Config::get('ffmpeg.crf', 23);
         $cmd .= " -preset " . escapeshellarg(Config::get('ffmpeg.preset', 'medium'));
         $cmd .= " -threads {$this->threads}";
+        // Ensure dimensions are even for libx264
+        $evenWidth = $this->outputWidth % 2 == 0 ? $this->outputWidth : $this->outputWidth - 1;
+        $evenHeight = $this->outputHeight % 2 == 0 ? $this->outputHeight : $this->outputHeight - 1;
         // Explicitly set output dimensions for encoder
-        $cmd .= " -s {$this->outputWidth}x{$this->outputHeight}";
+        $cmd .= " -s {$evenWidth}x{$evenHeight}";
         $cmd .= " -movflags +faststart"; // Web optimization
 
         // Output
