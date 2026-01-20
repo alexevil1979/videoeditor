@@ -1,0 +1,49 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Configuration
+/config/config.php
+/.env
+
+# Storage (keep structure, ignore files)
+/storage/uploads/*
+!/storage/uploads/.gitkeep
+/storage/renders/*
+!/storage/renders/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+/storage/cache/*
+!/storage/cache/.gitkeep
+
+# Public uploads symlink
+/public/uploads
+
+# IDE
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Composer
+/composer.lock
+
+# PHP
+*.php~
+.phpunit.result.cache

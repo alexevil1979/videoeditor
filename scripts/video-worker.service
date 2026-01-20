@@ -1,0 +1,23 @@
+[Unit]
+Description=Video Overlay Queue Worker
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/ssd/www/videoeditor
+ExecStart=/usr/bin/php /ssd/www/videoeditor/scripts/worker.php
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=2G
+
+# Environment
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+[Install]
+WantedBy=multi-user.target

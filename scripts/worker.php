@@ -1,0 +1,117 @@
+<?php
+
+/**
+ * Video Render Queue Worker
+ * Run this as a systemd service for continuous processing
+ */
+
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use App\Core\Config;
+use App\Core\Database;
+use App\Models\RenderJob;
+use App\Services\FFmpegService;
+
+// Load configuration
+Config::load(__DIR__ . '/../config/config.php');
+
+// Worker configuration
+$workerId = gethostname() . '_' . getmypid();
+$sleepInterval = Config::get('queue.worker_sleep', 2);
+$maxRetries = Config::get('queue.max_retries', 3);
+$timeout = Config::get('queue.timeout', 3600);
+
+echo "Worker started: {$workerId}\n";
+
+$ffmpegService = new FFmpegService();
+
+while (true) {
+    try {
+        // Get next pending job
+        $job = RenderJob::getNextPending();
+
+        if (!$job) {
+            sleep($sleepInterval);
+            continue;
+        }
+
+        $jobId = $job['id'];
+        $videoId = $job['video_id'];
+        $presetId = $job['preset_id'];
+
+        echo "Processing job #{$jobId} (video: {$videoId}, preset: {$presetId})\n";
+
+        // Lock job (update status to processing)
+        RenderJob::update($jobId, [
+            'status' => 'processing',
+            'started_at' => date('Y-m-d H:i:s'),
+            'worker_id' => $workerId,
+            'progress' => 10,
+        ]);
+
+        // Process video
+        $startTime = time();
+        $result = $ffmpegService->processVideo($jobId, $videoId, $presetId);
+
+        if ($result['success']) {
+            // Update job as completed
+            $outputFilename = basename($result['output_path']);
+            
+            RenderJob::update($jobId, [
+                'status' => 'completed',
+                'completed_at' => date('Y-m-d H:i:s'),
+                'output_path' => $result['output_path'],
+                'output_filename' => $outputFilename,
+                'output_size' => $result['output_size'],
+                'progress' => 100,
+            ]);
+
+            // Update video status
+            Database::query(
+                "UPDATE videos SET status = 'ready' WHERE id = ?",
+                [$videoId]
+            );
+
+            $processingTime = time() - $startTime;
+            echo "Job #{$jobId} completed in {$processingTime}s\n";
+        } else {
+            // Handle failure
+            $retryCount = $job['retry_count'] + 1;
+            
+            if ($retryCount < $maxRetries) {
+                // Retry
+                RenderJob::update($jobId, [
+                    'status' => 'pending',
+                    'retry_count' => $retryCount,
+                    'error_message' => $result['message'] ?? 'Processing failed',
+                    'worker_id' => null,
+                ]);
+                echo "Job #{$jobId} failed, will retry (attempt {$retryCount}/{$maxRetries})\n";
+            } else {
+                // Max retries reached
+                RenderJob::update($jobId, [
+                    'status' => 'failed',
+                    'error_message' => $result['message'] ?? 'Processing failed after max retries',
+                    'worker_id' => null,
+                ]);
+                echo "Job #{$jobId} failed permanently\n";
+            }
+        }
+
+    } catch (\Exception $e) {
+        echo "Error: " . $e->getMessage() . "\n";
+        echo $e->getTraceAsString() . "\n";
+        
+        // Log error
+        if (isset($jobId)) {
+            RenderJob::update($jobId, [
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+                'worker_id' => null,
+            ]);
+        }
+    }
+
+    // Small delay between jobs
+    usleep(500000); // 0.5 seconds
+}
