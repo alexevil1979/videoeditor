@@ -75,7 +75,24 @@ while (true) {
             $processingTime = time() - $startTime;
             echo "Job #{$jobId} completed in {$processingTime}s\n";
         } else {
-            // Handle failure
+            // Handle failure - save detailed error message
+            $errorMessage = $result['message'] ?? 'Processing failed';
+            $errorDetails = $result['error'] ?? '';
+            
+            // Combine error message and details
+            $fullError = $errorMessage;
+            if ($errorDetails) {
+                $fullError .= "\n\nFFmpeg Error:\n" . $errorDetails;
+            }
+            
+            // Log error to file
+            $logFile = __DIR__ . '/../storage/logs/worker_errors.log';
+            $logDir = dirname($logFile);
+            if (!is_dir($logDir)) {
+                mkdir($logDir, 0755, true);
+            }
+            error_log("Job #{$jobId} failed: {$fullError}\n", 3, $logFile);
+            
             $retryCount = $job['retry_count'] + 1;
             
             if ($retryCount < $maxRetries) {
@@ -83,18 +100,26 @@ while (true) {
                 RenderJob::update($jobId, [
                     'status' => 'pending',
                     'retry_count' => $retryCount,
-                    'error_message' => $result['message'] ?? 'Processing failed',
+                    'error_message' => $fullError,
                     'worker_id' => null,
                 ]);
                 echo "Job #{$jobId} failed, will retry (attempt {$retryCount}/{$maxRetries})\n";
+                echo "Error: {$errorMessage}\n";
+                if ($errorDetails) {
+                    echo "Details: " . substr($errorDetails, 0, 200) . "...\n";
+                }
             } else {
                 // Max retries reached
                 RenderJob::update($jobId, [
                     'status' => 'failed',
-                    'error_message' => $result['message'] ?? 'Processing failed after max retries',
+                    'error_message' => $fullError,
                     'worker_id' => null,
                 ]);
                 echo "Job #{$jobId} failed permanently\n";
+                echo "Error: {$errorMessage}\n";
+                if ($errorDetails) {
+                    echo "Details: " . substr($errorDetails, 0, 200) . "...\n";
+                }
             }
         }
 

@@ -34,15 +34,57 @@ class FFmpegService
         }
 
         $inputPath = $video['storage_path'];
+        
+        // Check if input file exists
+        if (!file_exists($inputPath)) {
+            return [
+                'success' => false,
+                'message' => "Input video file not found: {$inputPath}",
+                'error' => "File does not exist: {$inputPath}",
+            ];
+        }
+        
+        // Check if input file is readable
+        if (!is_readable($inputPath)) {
+            return [
+                'success' => false,
+                'message' => "Input video file is not readable: {$inputPath}",
+                'error' => "Permission denied: {$inputPath}",
+            ];
+        }
+        
         $outputPath = $this->generateOutputPath($jobId);
         $outputDir = dirname($outputPath);
 
         if (!is_dir($outputDir)) {
-            mkdir($outputDir, 0755, true);
+            if (!mkdir($outputDir, 0755, true)) {
+                return [
+                    'success' => false,
+                    'message' => "Failed to create output directory: {$outputDir}",
+                    'error' => "Cannot create directory: {$outputDir}",
+                ];
+            }
+        }
+        
+        // Check if output directory is writable
+        if (!is_writable($outputDir)) {
+            return [
+                'success' => false,
+                'message' => "Output directory is not writable: {$outputDir}",
+                'error' => "Permission denied: {$outputDir}",
+            ];
         }
 
         // Build FFmpeg command
         $command = $this->buildFFmpegCommand($inputPath, $outputPath, $presetItems, $video);
+        
+        // Log command for debugging
+        $logFile = Config::get('storage.logs') . '/ffmpeg_commands.log';
+        $logDir = dirname($logFile);
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+        error_log("Job #{$jobId} FFmpeg command: {$command}\n", 3, $logFile);
 
         // Execute
         $startTime = time();
@@ -50,12 +92,16 @@ class FFmpegService
         $returnCode = 0;
 
         exec($command . ' 2>&1', $output, $returnCode);
+        
+        // Log output for debugging
+        error_log("Job #{$jobId} FFmpeg output (code: {$returnCode}):\n" . implode("\n", $output) . "\n\n", 3, $logFile);
 
         if ($returnCode !== 0 || !file_exists($outputPath)) {
+            $errorOutput = implode("\n", $output);
             return [
                 'success' => false,
                 'message' => 'FFmpeg processing failed',
-                'error' => implode("\n", $output),
+                'error' => $errorOutput ?: "FFmpeg returned code {$returnCode} but no error output",
             ];
         }
 
