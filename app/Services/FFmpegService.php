@@ -25,13 +25,18 @@ class FFmpegService
 
     public function processVideo(int $jobId, int $videoId, int $presetId): array
     {
+        error_log("FFmpegService::processVideo called: jobId={$jobId}, videoId={$videoId}, presetId={$presetId}");
+        
         $video = Video::findById($videoId);
         $preset = Preset::findById($presetId);
         $presetItems = Preset::getItems($presetId);
 
         if (!$video || !$preset || empty($presetItems)) {
+            error_log("FFmpegService: Invalid video or preset - video=" . ($video ? 'found' : 'NOT FOUND') . ", preset=" . ($preset ? 'found' : 'NOT FOUND') . ", items=" . count($presetItems));
             return ['success' => false, 'message' => 'Invalid video or preset'];
         }
+        
+        error_log("FFmpegService: Video found: " . $video['storage_path']);
 
         $inputPath = $video['storage_path'];
         
@@ -97,7 +102,10 @@ class FFmpegService
         $output = [];
         $returnCode = 0;
 
+        error_log("FFmpegService: Executing command: {$command}");
         exec($command . ' 2>&1', $output, $returnCode);
+        
+        error_log("FFmpegService: Command executed, returnCode={$returnCode}, outputLines=" . count($output));
         
         // Log output for debugging
         if (is_dir($logsDir) && is_writable($logsDir)) {
@@ -108,11 +116,17 @@ class FFmpegService
         if ($returnCode !== 0 || !file_exists($outputPath)) {
             $errorOutput = implode("\n", $output);
             
+            error_log("FFmpegService: Processing failed - returnCode={$returnCode}, outputExists=" . (file_exists($outputPath) ? 'yes' : 'no'));
+            error_log("FFmpegService: Error output length=" . strlen($errorOutput));
+            
             // If no output, try to get more info
             if (empty($errorOutput)) {
                 $errorOutput = "FFmpeg returned code {$returnCode} but produced no output.\n";
                 $errorOutput .= "Input file: {$inputPath}\n";
+                $errorOutput .= "Input exists: " . (file_exists($inputPath) ? 'yes' : 'no') . "\n";
                 $errorOutput .= "Output file: {$outputPath}\n";
+                $errorOutput .= "Output dir exists: " . (is_dir($outputDir) ? 'yes' : 'no') . "\n";
+                $errorOutput .= "Output dir writable: " . (is_writable($outputDir) ? 'yes' : 'no') . "\n";
                 $errorOutput .= "Command: {$command}\n";
             }
             

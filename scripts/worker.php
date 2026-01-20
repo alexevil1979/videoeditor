@@ -52,21 +52,29 @@ while (true) {
         // Process video
         $startTime = time();
         try {
+            echo "Calling FFmpegService::processVideo()...\n";
             $result = $ffmpegService->processVideo($jobId, $videoId, $presetId);
             
             // Debug: show what we got
+            echo "DEBUG: Result received\n";
+            echo "DEBUG: success = " . ($result['success'] ? 'true' : 'false') . "\n";
             if (!$result['success']) {
                 echo "DEBUG: FFmpegService returned error\n";
                 echo "DEBUG: message = " . ($result['message'] ?? 'NOT SET') . "\n";
-                echo "DEBUG: error = " . (isset($result['error']) ? substr($result['error'], 0, 200) : 'NOT SET') . "\n";
+                $errorPreview = isset($result['error']) ? substr($result['error'], 0, 500) : 'NOT SET';
+                echo "DEBUG: error (first 500 chars) = " . $errorPreview . "\n";
+                if (isset($result['error']) && strlen($result['error']) > 500) {
+                    echo "DEBUG: error length = " . strlen($result['error']) . " characters\n";
+                }
             }
         } catch (\Exception $e) {
+            echo "EXCEPTION caught: " . $e->getMessage() . "\n";
+            echo "EXCEPTION trace: " . $e->getTraceAsString() . "\n";
             $result = [
                 'success' => false,
                 'message' => 'Exception during processing: ' . $e->getMessage(),
                 'error' => $e->getTraceAsString(),
             ];
-            echo "EXCEPTION: " . $e->getMessage() . "\n";
         }
 
         if ($result['success']) {
@@ -92,14 +100,22 @@ while (true) {
             echo "Job #{$jobId} completed in {$processingTime}s\n";
         } else {
             // Handle failure - save detailed error message
+            echo "DEBUG: Processing failed, extracting error details...\n";
             $errorMessage = $result['message'] ?? 'Processing failed';
             $errorDetails = $result['error'] ?? '';
+            
+            echo "DEBUG: errorMessage = {$errorMessage}\n";
+            echo "DEBUG: errorDetails length = " . strlen($errorDetails) . "\n";
             
             // Combine error message and details
             $fullError = $errorMessage;
             if ($errorDetails) {
                 $fullError .= "\n\nFFmpeg Error:\n" . $errorDetails;
+            } else {
+                $fullError .= "\n\n(No error details provided)";
             }
+            
+            echo "DEBUG: fullError length = " . strlen($fullError) . "\n";
             
             // Log error to file
             $logDir = __DIR__ . '/../storage/logs';
