@@ -207,6 +207,30 @@ class ElementProperties(QGroupBox):
         self.spin_fade_out.valueChanged.connect(self._on_change)
         form.addRow("Fade Out:", self.spin_fade_out)
 
+        # --- Удаление фона ---
+        from PyQt6.QtWidgets import QCheckBox
+        self.chk_remove_bg = QCheckBox("Удалить фон")
+        self.chk_remove_bg.setToolTip(
+            "Автоматически убирает однотонный фон GIF/PNG\n"
+            "по цвету угловых пикселей (chroma key)"
+        )
+        self.chk_remove_bg.stateChanged.connect(self._on_bg_change)
+        form.addRow(self.chk_remove_bg)
+
+        # Допуск удаления фона
+        self.slider_bg_tolerance = QSlider(Qt.Orientation.Horizontal)
+        self.slider_bg_tolerance.setRange(5, 150)
+        self.slider_bg_tolerance.setValue(40)
+        self.slider_bg_tolerance.setToolTip(
+            "Допуск цвета: чем больше — тем больше оттенков фона удаляется"
+        )
+        self.slider_bg_tolerance.valueChanged.connect(self._on_bg_change)
+        self.lbl_bg_tol = QLabel("40")
+        bg_row = QHBoxLayout()
+        bg_row.addWidget(self.slider_bg_tolerance)
+        bg_row.addWidget(self.lbl_bg_tol)
+        form.addRow("Допуск фона:", bg_row)
+
         # Скрыть, пока ничего не выбрано
         self._set_enabled(False)
 
@@ -230,6 +254,9 @@ class ElementProperties(QGroupBox):
             self.spin_y.setValue(self._element.y_percent)
             self.spin_fade_in.setValue(self._element.fade_in)
             self.spin_fade_out.setValue(self._element.fade_out)
+            self.chk_remove_bg.setChecked(self._element.remove_bg)
+            self.slider_bg_tolerance.setValue(self._element.bg_tolerance)
+            self.lbl_bg_tol.setText(str(self._element.bg_tolerance))
         else:
             self._set_enabled(False)
             self.lbl_name.setText("—")
@@ -238,7 +265,8 @@ class ElementProperties(QGroupBox):
     def _set_enabled(self, on: bool):
         for w in (self.spin_start, self.spin_duration, self.slider_opacity,
                   self.spin_scale, self.spin_x, self.spin_y,
-                  self.spin_fade_in, self.spin_fade_out):
+                  self.spin_fade_in, self.spin_fade_out,
+                  self.chk_remove_bg, self.slider_bg_tolerance):
             w.setEnabled(on)
 
     def _on_change(self):
@@ -254,6 +282,18 @@ class ElementProperties(QGroupBox):
         self._element.y_percent = self.spin_y.value()
         self._element.fade_in = self.spin_fade_in.value()
         self._element.fade_out = self.spin_fade_out.value()
+        self.property_changed.emit()
+
+    def _on_bg_change(self):
+        """Вызывается при изменении настроек удаления фона."""
+        if self._updating or not self._element:
+            return
+        self._element.remove_bg = self.chk_remove_bg.isChecked()
+        self._element.bg_tolerance = self.slider_bg_tolerance.value()
+        self.lbl_bg_tol.setText(str(self.slider_bg_tolerance.value()))
+        # Сбрасываем кеш пиксмапов для этого файла, чтобы пересчитать
+        from app.video_preview import gif_cache
+        gif_cache.invalidate(self._element.file_path)
         self.property_changed.emit()
 
     def update_position(self, x: float, y: float):

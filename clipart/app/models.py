@@ -46,6 +46,10 @@ class OverlayElement:
     fade_in: float = 0.0
     fade_out: float = 0.0
 
+    # Удаление фона (chroma key по цвету углов)
+    remove_bg: bool = False       # включить удаление фона
+    bg_tolerance: int = 40        # допуск цвета (0‑255), чем больше — тем больше убирается
+
     # --- Вспомогательные свойства ---
     @property
     def end_time(self) -> float:

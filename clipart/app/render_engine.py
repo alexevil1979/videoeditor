@@ -35,6 +35,39 @@ from app.models import OverlayElement, Project
 
 
 # ---------------------------------------------------------------------------
+# Удаление фона (chroma key) — для рендеринга
+# ---------------------------------------------------------------------------
+def _remove_bg_numpy(arr: np.ndarray, tolerance: int = 40) -> np.ndarray:
+    """
+    Удаляет фон из RGBA numpy-массива по цвету угловых пикселей.
+    Аналогичный алгоритм используется в превью (video_preview.py).
+    """
+    if arr.ndim != 3 or arr.shape[2] < 3:
+        return arr
+    h, w = arr.shape[:2]
+    result = arr.copy()
+    if result.shape[2] == 3:
+        alpha_ch = np.full((h, w, 1), 255, dtype=np.uint8)
+        result = np.concatenate([result, alpha_ch], axis=2)
+
+    corner_size = max(1, min(4, h // 10, w // 10))
+    corners = []
+    for cy, cx in [(0, 0), (0, w - corner_size), (h - corner_size, 0),
+                   (h - corner_size, w - corner_size)]:
+        patch = result[cy:cy + corner_size, cx:cx + corner_size, :3]
+        corners.append(patch.reshape(-1, 3))
+    bg_color = np.median(np.concatenate(corners, axis=0), axis=0).astype(np.float32)
+
+    rgb = result[:, :, :3].astype(np.float32)
+    diff = np.sqrt(np.sum((rgb - bg_color) ** 2, axis=2))
+
+    edge_zone = tolerance * 0.3
+    soft_mask = np.clip((diff - tolerance + edge_zone) / max(edge_zone, 1), 0, 1)
+    result[:, :, 3] = (result[:, :, 3].astype(np.float32) * soft_mask).astype(np.uint8)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Определение доступности GPU (NVIDIA NVENC)
 # ---------------------------------------------------------------------------
 _nvenc_available: Optional[bool] = None  # кеш результата
@@ -290,12 +323,15 @@ class RenderWorker(QThread):
         if not frames:
             return self._make_image_clip(elem, target_h)
 
-        # Масштабируем кадры
+        # Масштабируем кадры + удаление фона если включено
         scaled_frames_rgb = []
         scaled_frames_alpha = []
-        has_alpha = frames[0].shape[-1] == 4
 
         for frame_arr in frames:
+            # Удаление фона по цвету углов
+            if elem.remove_bg:
+                frame_arr = _remove_bg_numpy(frame_arr, elem.bg_tolerance)
+
             pil_frame = PILImage.fromarray(frame_arr)
             orig_w, orig_h = pil_frame.size
             if orig_h > 0:
@@ -305,11 +341,12 @@ class RenderWorker(QThread):
                 pil_frame = pil_frame.resize((new_w, new_h), PILImage.LANCZOS)
 
             arr = np.array(pil_frame)
-            if has_alpha:
+            if arr.shape[2] >= 4:
                 scaled_frames_rgb.append(arr[:, :, :3])
                 scaled_frames_alpha.append(arr[:, :, 3] / 255.0)
             else:
                 scaled_frames_rgb.append(arr[:, :, :3])
+                scaled_frames_alpha.append(np.ones((arr.shape[0], arr.shape[1])))
 
         if not scaled_frames_rgb:
             return None
@@ -334,15 +371,14 @@ class RenderWorker(QThread):
         clip = VideoClip(make_frame_rgb, duration=elem.duration)
         clip = clip.with_fps(25)
 
-        # Маска (альфа-канал)
-        if has_alpha and scaled_frames_alpha:
-            def make_mask(t):
-                idx = _get_frame_index(t)
-                return scaled_frames_alpha[idx]
+        # Маска (альфа-канал) — всегда создаём
+        def make_mask(t):
+            idx = _get_frame_index(t)
+            return scaled_frames_alpha[idx]
 
-            mask_clip = VideoClip(make_mask, duration=elem.duration, is_mask=True)
-            mask_clip = mask_clip.with_fps(25)
-            clip = clip.with_mask(mask_clip)
+        mask_clip = VideoClip(make_mask, duration=elem.duration, is_mask=True)
+        mask_clip = mask_clip.with_fps(25)
+        clip = clip.with_mask(mask_clip)
 
         return clip
 
@@ -361,8 +397,13 @@ class RenderWorker(QThread):
             pil_img = pil_img.resize((new_w, new_h), PILImage.LANCZOS)
 
         arr = np.array(pil_img)
+
+        # Удаление фона если включено
+        if elem.remove_bg:
+            arr = _remove_bg_numpy(arr, elem.bg_tolerance)
+
         rgb = arr[:, :, :3]
-        alpha = arr[:, :, 3] / 255.0
+        alpha = arr[:, :, 3] / 255.0 if arr.shape[2] >= 4 else np.ones(rgb.shape[:2])
 
         clip = ImageClip(rgb).with_duration(elem.duration)
 

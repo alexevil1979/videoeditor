@@ -38,20 +38,81 @@ from app.models import OverlayElement, Project
 
 
 # ---------------------------------------------------------------------------
+# Удаление фона по цвету углов (chroma key)
+# ---------------------------------------------------------------------------
+def remove_background_rgba(arr: np.ndarray, tolerance: int = 40) -> np.ndarray:
+    """
+    Удаляет фон из RGBA-массива изображения.
+
+    Алгоритм: определяет цвет фона по четырём углам изображения,
+    затем делает прозрачными все пиксели, близкие к этому цвету.
+
+    Args:
+        arr: numpy-массив формы (H, W, 4) — RGBA
+        tolerance: допуск (0‑255), чем больше — тем больше пикселей удаляется
+
+    Returns:
+        numpy-массив (H, W, 4) с прозрачным фоном
+    """
+    if arr.ndim != 3 or arr.shape[2] < 3:
+        return arr
+
+    h, w = arr.shape[:2]
+    result = arr.copy()
+
+    # Собираем цвета из четырёх углов (по несколько пикселей для надёжности)
+    corner_size = max(1, min(4, h // 10, w // 10))
+    corners = []
+    for cy, cx in [(0, 0), (0, w - corner_size), (h - corner_size, 0),
+                   (h - corner_size, w - corner_size)]:
+        patch = arr[cy:cy + corner_size, cx:cx + corner_size, :3]
+        corners.append(patch.reshape(-1, 3))
+
+    corner_pixels = np.concatenate(corners, axis=0)
+
+    # Медианный цвет углов — это и есть фон
+    bg_color = np.median(corner_pixels, axis=0).astype(np.float32)
+
+    # Расстояние каждого пикселя до цвета фона (по всем каналам RGB)
+    rgb = result[:, :, :3].astype(np.float32)
+    diff = np.sqrt(np.sum((rgb - bg_color) ** 2, axis=2))
+
+    # Пиксели с расстоянием < tolerance → прозрачные
+    mask = diff < tolerance
+
+    # Плавный переход на краю допуска (anti-aliasing)
+    edge_zone = tolerance * 0.3
+    soft_mask = np.clip((diff - tolerance + edge_zone) / max(edge_zone, 1), 0, 1)
+
+    # Применяем: где mask=True → альфа=0, на краю — плавно
+    if result.shape[2] == 4:
+        result[:, :, 3] = (result[:, :, 3].astype(np.float32) * soft_mask).astype(np.uint8)
+    else:
+        # Если нет альфа-канала — добавляем
+        alpha = (soft_mask * 255).astype(np.uint8)
+        result = np.dstack([result[:, :, :3], alpha])
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Кеш кадров GIF-анимаций
 # ---------------------------------------------------------------------------
 class GifCache:
     """
-    Загружает все кадры GIF / APNG и хранит их как QPixmap.
-    Для статичных изображений хранит один кадр.
+    Загружает все кадры GIF / APNG и хранит их как numpy RGBA-массивы.
+    При запросе кадра может применить удаление фона и возвращает QPixmap.
     """
 
     def __init__(self):
-        self._cache: Dict[str, List[QPixmap]] = {}
+        # Сырые RGBA-массивы кадров
+        self._raw: Dict[str, List[np.ndarray]] = {}
         self._durations: Dict[str, List[int]] = {}  # мс на кадр
+        # Кеш QPixmap после удаления фона: ключ = (path, tolerance или -1)
+        self._px_cache: Dict[tuple, List[QPixmap]] = {}
 
     def load(self, path: str) -> None:
-        if path in self._cache:
+        if path in self._raw:
             return
         ext = Path(path).suffix.lower()
         if ext in ('.gif', '.apng'):
@@ -60,7 +121,7 @@ class GifCache:
             self._load_static(path)
 
     def _load_animated(self, path: str) -> None:
-        frames: List[QPixmap] = []
+        frames: List[np.ndarray] = []
         durations: List[int] = []
         try:
             pil_img = PILImage.open(path)
@@ -68,10 +129,7 @@ class GifCache:
             for i in range(n):
                 pil_img.seek(i)
                 frame_rgba = pil_img.convert("RGBA")
-                data = frame_rgba.tobytes("raw", "RGBA")
-                qimg = QImage(data, frame_rgba.width, frame_rgba.height,
-                              QImage.Format.Format_RGBA8888).copy()
-                frames.append(QPixmap.fromImage(qimg))
+                frames.append(np.array(frame_rgba))
                 dur = pil_img.info.get('duration', 100)
                 durations.append(dur if dur > 0 else 100)
         except Exception:
@@ -79,34 +137,64 @@ class GifCache:
             durations = []
 
         if not frames:
-            # Фоллбэк — статичная загрузка
             self._load_static(path)
             return
 
-        self._cache[path] = frames
+        self._raw[path] = frames
         self._durations[path] = durations
 
     def _load_static(self, path: str) -> None:
-        pm = QPixmap(path)
-        if pm.isNull():
-            # Пустой пиксмап-заглушка
-            pm = QPixmap(64, 64)
-            pm.fill(QColor(255, 0, 0, 128))
-        self._cache[path] = [pm]
+        try:
+            pil_img = PILImage.open(path).convert("RGBA")
+            self._raw[path] = [np.array(pil_img)]
+        except Exception:
+            # Заглушка
+            placeholder = np.zeros((64, 64, 4), dtype=np.uint8)
+            placeholder[:, :, 0] = 255
+            placeholder[:, :, 3] = 128
+            self._raw[path] = [placeholder]
         self._durations[path] = [0]
 
-    def get_frame(self, path: str, time_ms: int) -> Optional[QPixmap]:
+    def _get_pixmaps(self, path: str, remove_bg: bool, tolerance: int) -> List[QPixmap]:
+        """Возвращает список QPixmap, при необходимости с удалённым фоном."""
+        cache_key = (path, tolerance if remove_bg else -1)
+        if cache_key in self._px_cache:
+            return self._px_cache[cache_key]
+
+        raw_frames = self._raw.get(path, [])
+        pixmaps = []
+        for arr in raw_frames:
+            if remove_bg:
+                arr = remove_background_rgba(arr, tolerance)
+
+            h, w = arr.shape[:2]
+            if arr.shape[2] == 4:
+                fmt = QImage.Format.Format_RGBA8888
+            else:
+                fmt = QImage.Format.Format_RGB888
+
+            qimg = QImage(arr.data, w, h, arr.strides[0], fmt).copy()
+            pixmaps.append(QPixmap.fromImage(qimg))
+
+        self._px_cache[cache_key] = pixmaps
+        return pixmaps
+
+    def get_frame(self, path: str, time_ms: int,
+                  remove_bg: bool = False, tolerance: int = 40) -> Optional[QPixmap]:
         """Получить нужный кадр для заданного момента времени (мс)."""
-        if path not in self._cache:
+        if path not in self._raw:
             self.load(path)
-        frames = self._cache.get(path)
+        if path not in self._raw:
+            return None
+
+        frames = self._get_pixmaps(path, remove_bg, tolerance)
         if not frames:
             return None
         if len(frames) == 1:
             return frames[0]
 
         # Определяем кадр по суммарной длительности
-        durations = self._durations[path]
+        durations = self._durations.get(path, [100])
         total_dur = sum(durations)
         if total_dur == 0:
             return frames[0]
@@ -118,9 +206,16 @@ class GifCache:
                 return frames[i]
         return frames[-1]
 
+    def invalidate(self, path: str) -> None:
+        """Сбросить кеш QPixmap для файла (при изменении tolerance)."""
+        keys_to_remove = [k for k in self._px_cache if k[0] == path]
+        for k in keys_to_remove:
+            del self._px_cache[k]
+
     def clear(self) -> None:
-        self._cache.clear()
+        self._raw.clear()
         self._durations.clear()
+        self._px_cache.clear()
 
 
 # Глобальный кеш
@@ -409,7 +504,9 @@ class VideoPreviewWidget(QWidget):
         size = base_size * elem.scale / 100.0
 
         # Если есть кеш изображения, используем его пропорции
-        px = gif_cache.get_frame(elem.file_path, int(self.current_time * 1000))
+        px = gif_cache.get_frame(elem.file_path, int(self.current_time * 1000),
+                                 remove_bg=elem.remove_bg,
+                                 tolerance=elem.bg_tolerance)
         if px and not px.isNull():
             aspect = px.width() / max(px.height(), 1)
             w = size * aspect
@@ -479,11 +576,15 @@ class VideoPreviewWidget(QWidget):
 
         rect = self._element_rect(elem)
 
-        # Загружаем кадр из кеша
+        # Загружаем кадр из кеша (с удалением фона если включено)
         if elem.file_path and os.path.exists(elem.file_path):
             gif_cache.load(elem.file_path)
             elapsed_ms = int((t - elem.start_time) * 1000)
-            px = gif_cache.get_frame(elem.file_path, max(0, elapsed_ms))
+            px = gif_cache.get_frame(
+                elem.file_path, max(0, elapsed_ms),
+                remove_bg=elem.remove_bg,
+                tolerance=elem.bg_tolerance
+            )
         else:
             px = None
 
