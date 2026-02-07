@@ -1,0 +1,22 @@
+---
+description: Automatically git add, commit and push all changes after every edit
+alwaysApply: true
+---
+
+# Auto-push all changes to GitHub
+
+After making ANY file changes (create, edit, delete), immediately push to git:
+
+```bash
+git add -A
+git commit -m "описательное сообщение о сделанных изменениях"
+git push
+```
+
+Rules:
+- Do this after EVERY set of changes, without asking the user
+- Commit message should be concise and describe what was changed (in Russian)
+- Always use `git add -A` to include all changes
+- Push to the current branch (typically `main`)
+- If push fails, report the error to the user
+- Do NOT skip this step — the user expects all changes to appear on GitHub immediately

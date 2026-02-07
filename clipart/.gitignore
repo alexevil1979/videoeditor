@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.local
+outputs/*.mp4
+outputs/*.avi
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
