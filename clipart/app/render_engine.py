@@ -192,10 +192,182 @@ def _get_encoding_params(use_gpu: bool,
 
 
 # ---------------------------------------------------------------------------
+# Генерация текстового изображения через Pillow
+# ---------------------------------------------------------------------------
+def _render_text_image(elem: OverlayElement, target_h: int) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """
+    Рисует текст CTA с помощью Pillow и возвращает (rgb_array, alpha_array).
+    target_h используется для масштабирования шрифта.
+    """
+    from PIL import ImageDraw, ImageFont
+
+    font_size = max(8, elem.font_size)
+
+    # Пробуем загрузить системный шрифт
+    font = None
+    try:
+        # Windows: пробуем несколько вариантов
+        for suffix in ("", ".ttf", ".TTF"):
+            for base in (elem.font_family, elem.font_family.replace(" ", "")):
+                try:
+                    font = ImageFont.truetype(base + suffix, font_size)
+                    break
+                except (OSError, IOError):
+                    continue
+            if font:
+                break
+
+        if not font:
+            # Пробуем стандартные пути Windows
+            win_fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+            for candidate in [
+                f"{elem.font_family}.ttf",
+                f"{elem.font_family.lower()}.ttf",
+                "arial.ttf", "arialbd.ttf"
+            ]:
+                font_path = win_fonts / candidate
+                if font_path.exists():
+                    font = ImageFont.truetype(str(font_path), font_size)
+                    break
+
+        if not font:
+            font = ImageFont.load_default()
+    except Exception:
+        font = ImageFont.load_default()
+
+    # Добавляем жирность через размер если нужно (Pillow не поддерживает bold напрямую)
+    # Для bold пробуем найти Bold-вариант шрифта
+    if elem.text_bold and font:
+        try:
+            win_fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+            for bold_name in [
+                f"{elem.font_family} Bold.ttf",
+                f"{elem.font_family.lower()}bd.ttf",
+                f"{elem.font_family.replace(' ', '')}bd.ttf",
+                "arialbd.ttf"
+            ]:
+                bold_path = win_fonts / bold_name
+                if bold_path.exists():
+                    font = ImageFont.truetype(str(bold_path), font_size)
+                    break
+        except Exception:
+            pass
+
+    # Определяем размер текста
+    dummy = PILImage.new("RGBA", (1, 1))
+    draw = PILImage.new("RGBA", (1, 1))
+    d = ImageDraw.Draw(dummy)
+    bbox = d.textbbox((0, 0), elem.text, font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+
+    padding = int(font_size * 0.4)
+    outline_w = max(1, font_size // 12) if elem.text_outline else 0
+    img_w = text_w + padding * 2 + outline_w * 2
+    img_h = text_h + padding * 2 + outline_w * 2
+
+    # Создаём изображение
+    img = PILImage.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Фон текста
+    if elem.text_bg_color:
+        bg = _hex_to_rgba(elem.text_bg_color, 200)
+        draw.rounded_rectangle([(0, 0), (img_w - 1, img_h - 1)], radius=8, fill=bg)
+
+    # Позиция текста
+    tx = padding + outline_w - bbox[0]
+    ty = padding + outline_w - bbox[1]
+
+    # Обводка
+    if elem.text_outline and outline_w > 0:
+        outline_rgba = _hex_to_rgba(elem.text_outline_color, 255)
+        for dx in range(-outline_w, outline_w + 1):
+            for dy in range(-outline_w, outline_w + 1):
+                if dx == 0 and dy == 0:
+                    continue
+                draw.text((tx + dx, ty + dy), elem.text, font=font, fill=outline_rgba)
+
+    # Основной текст
+    text_rgba = _hex_to_rgba(elem.font_color, 255)
+    draw.text((tx, ty), elem.text, font=font, fill=text_rgba)
+
+    arr = np.array(img)
+    rgb = arr[:, :, :3]
+    alpha = arr[:, :, 3] / 255.0
+    return rgb, alpha
+
+
+def _hex_to_rgba(hex_color: str, alpha: int = 255) -> Tuple[int, int, int, int]:
+    """Конвертирует hex-цвет (#RRGGBB) в кортеж (R, G, B, A)."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) == 6:
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        return (r, g, b, alpha)
+    return (255, 255, 255, alpha)
+
+
+# ---------------------------------------------------------------------------
 # Создание оверлейных клипов (module-level функции)
 # ---------------------------------------------------------------------------
+def _make_text_clip(elem: OverlayElement, vw: int, vh: int):
+    """Создаёт MoviePy-клип для текстового CTA-элемента."""
+    result = _render_text_image(elem, vh)
+    if result is None:
+        return None
+
+    rgb, alpha = result
+
+    # Масштаб: применяем elem.scale
+    h_orig, w_orig = rgb.shape[:2]
+    scale_factor = elem.scale / 100.0
+    new_w = max(1, int(w_orig * scale_factor))
+    new_h = max(1, int(h_orig * scale_factor))
+
+    if (new_w, new_h) != (w_orig, h_orig):
+        pil_rgb = PILImage.fromarray(rgb).resize((new_w, new_h), PILImage.LANCZOS)
+        rgb = np.array(pil_rgb)
+        # Для маски: конвертим в 0-255, resize, потом обратно в 0-1
+        pil_alpha = PILImage.fromarray((alpha * 255).astype(np.uint8)).resize(
+            (new_w, new_h), PILImage.LANCZOS
+        )
+        alpha = np.array(pil_alpha) / 255.0
+
+    clip = ImageClip(rgb).with_duration(elem.duration)
+    mask = ImageClip(alpha, is_mask=True).with_duration(elem.duration)
+    clip = clip.with_mask(mask)
+
+    # Позиция (в пикселях от процентов)
+    x_px = int(vw * elem.x_percent / 100.0)
+    y_px = int(vh * elem.y_percent / 100.0)
+    pos_x = max(0, x_px - new_w // 2)
+    pos_y = max(0, y_px - new_h // 2)
+
+    clip = clip.with_position((pos_x, pos_y))
+    clip = clip.with_start(elem.start_time)
+
+    # Прозрачность
+    if elem.opacity < 100:
+        clip = clip.with_opacity(elem.opacity / 100.0)
+
+    # Fade in / out
+    effects = []
+    if elem.fade_in > 0:
+        effects.append(vfx.CrossFadeIn(elem.fade_in))
+    if elem.fade_out > 0:
+        effects.append(vfx.CrossFadeOut(elem.fade_out))
+    if effects:
+        clip = clip.with_effects(effects)
+
+    return clip
+
+
 def _make_overlay_clip(elem: OverlayElement, vw: int, vh: int, fps: float):
     """Создаёт MoviePy-клип для одного оверлейного элемента."""
+    # Текстовый элемент — специальная обработка
+    if elem.is_text and elem.text:
+        return _make_text_clip(elem, vw, vh)
+
     if not elem.file_path or not os.path.exists(elem.file_path):
         return None
 
@@ -565,16 +737,18 @@ def save_gpu_setting(use_gpu: bool) -> None:
 
 
 def load_output_settings() -> dict:
-    """Загружает настройки вывода (префикс, пакетная обработка) из QSettings."""
+    """Загружает настройки вывода (префикс, пакетная обработка, папка) из QSettings."""
     s = QSettings("VideoCTAEditor", "VideoCTAEditor")
     return {
         "prefix": s.value("output/prefix", "cta_", type=str),
         "batch": s.value("output/batch", False, type=bool),
+        "out_dir": s.value("output/out_dir", "", type=str),
     }
 
 
-def save_output_settings(prefix: str, batch: bool) -> None:
+def save_output_settings(prefix: str, batch: bool, out_dir: str = "") -> None:
     """Сохраняет настройки вывода в QSettings."""
     s = QSettings("VideoCTAEditor", "VideoCTAEditor")
     s.setValue("output/prefix", prefix)
     s.setValue("output/batch", batch)
+    s.setValue("output/out_dir", out_dir)

@@ -503,17 +503,39 @@ class VideoPreviewWidget(QWidget):
         base_size = min(self._display_rect.width(), self._display_rect.height()) * 0.15
         size = base_size * elem.scale / 100.0
 
+        # Текстовый элемент — размер по тексту
+        if elem.is_text and elem.text:
+            return self._text_element_rect(elem, center, size)
+
         # Если есть кеш изображения, используем его пропорции
-        px = gif_cache.get_frame(elem.file_path, int(self.current_time * 1000),
-                                 remove_bg=elem.remove_bg,
-                                 tolerance=elem.bg_tolerance)
-        if px and not px.isNull():
-            aspect = px.width() / max(px.height(), 1)
-            w = size * aspect
-            h = size
-        else:
-            w = size
-            h = size
+        if elem.file_path and os.path.exists(elem.file_path):
+            px = gif_cache.get_frame(elem.file_path, int(self.current_time * 1000),
+                                     remove_bg=elem.remove_bg,
+                                     tolerance=elem.bg_tolerance)
+            if px and not px.isNull():
+                aspect = px.width() / max(px.height(), 1)
+                w = size * aspect
+                h = size
+                return QRectF(center.x() - w / 2, center.y() - h / 2, w, h)
+
+        return QRectF(center.x() - size / 2, center.y() - size / 2, size, size)
+
+    def _text_element_rect(self, elem: OverlayElement, center: QPointF, base_size: float) -> QRectF:
+        """Рассчитывает прямоугольник текстового элемента."""
+        # Масштаб шрифта относительно виджета
+        display_scale = self._display_rect.height() / max(self._video_h, 1) if self._video_h > 0 else 1.0
+        font_size = max(8, int(elem.font_size * display_scale * elem.scale / 100.0))
+
+        font = QFont(elem.font_family, font_size)
+        font.setBold(elem.text_bold)
+        font.setItalic(elem.text_italic)
+
+        from PyQt6.QtGui import QFontMetrics
+        fm = QFontMetrics(font)
+        text_rect = fm.boundingRect(elem.text)
+        padding = font_size * 0.3
+        w = text_rect.width() + padding * 2
+        h = text_rect.height() + padding * 2
 
         return QRectF(center.x() - w / 2, center.y() - h / 2, w, h)
 
@@ -576,31 +598,34 @@ class VideoPreviewWidget(QWidget):
 
         rect = self._element_rect(elem)
 
-        # Загружаем кадр из кеша (с удалением фона если включено)
-        if elem.file_path and os.path.exists(elem.file_path):
-            gif_cache.load(elem.file_path)
-            elapsed_ms = int((t - elem.start_time) * 1000)
-            px = gif_cache.get_frame(
-                elem.file_path, max(0, elapsed_ms),
-                remove_bg=elem.remove_bg,
-                tolerance=elem.bg_tolerance
-            )
-        else:
-            px = None
-
         painter.save()
         painter.setOpacity(opacity)
 
-        if px and not px.isNull():
-            painter.drawPixmap(rect.toRect(), px)
+        # === Текстовый элемент ===
+        if elem.is_text and elem.text:
+            self._draw_text_overlay(painter, elem, rect)
         else:
-            # Заглушка — цветной прямоугольник с текстом
-            painter.setBrush(QBrush(QColor(137, 180, 250, int(opacity * 180))))
-            painter.setPen(QPen(QColor(205, 214, 244), 1))
-            painter.drawRoundedRect(rect, 6, 6)
-            painter.setFont(QFont("Segoe UI", 9))
-            painter.setPen(QColor(205, 214, 244))
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, elem.name)
+            # === Графический элемент (GIF/PNG) ===
+            px = None
+            if elem.file_path and os.path.exists(elem.file_path):
+                gif_cache.load(elem.file_path)
+                elapsed_ms = int((t - elem.start_time) * 1000)
+                px = gif_cache.get_frame(
+                    elem.file_path, max(0, elapsed_ms),
+                    remove_bg=elem.remove_bg,
+                    tolerance=elem.bg_tolerance
+                )
+
+            if px and not px.isNull():
+                painter.drawPixmap(rect.toRect(), px)
+            else:
+                # Заглушка — цветной прямоугольник с текстом
+                painter.setBrush(QBrush(QColor(137, 180, 250, int(opacity * 180))))
+                painter.setPen(QPen(QColor(205, 214, 244), 1))
+                painter.drawRoundedRect(rect, 6, 6)
+                painter.setFont(QFont("Segoe UI", 9))
+                painter.setPen(QColor(205, 214, 244))
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, elem.name)
 
         painter.restore()
 
@@ -618,6 +643,41 @@ class VideoPreviewWidget(QWidget):
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(handle)
             painter.restore()
+
+    def _draw_text_overlay(self, painter: QPainter, elem: OverlayElement, rect: QRectF):
+        """Рисует текстовый CTA-элемент."""
+        # Масштаб шрифта
+        display_scale = self._display_rect.height() / max(self._video_h, 1) if self._video_h > 0 else 1.0
+        font_size = max(8, int(elem.font_size * display_scale * elem.scale / 100.0))
+
+        font = QFont(elem.font_family, font_size)
+        font.setBold(elem.text_bold)
+        font.setItalic(elem.text_italic)
+        painter.setFont(font)
+
+        # Фон текста
+        if elem.text_bg_color:
+            bg_color = QColor(elem.text_bg_color)
+            bg_color.setAlpha(180)
+            painter.setBrush(QBrush(bg_color))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(rect, 6, 6)
+
+        # Обводка текста (рисуем текст смещённым в 8 направлениях)
+        if elem.text_outline:
+            outline_color = QColor(elem.text_outline_color)
+            painter.setPen(outline_color)
+            outline_w = max(1, font_size // 15)
+            for dx in range(-outline_w, outline_w + 1):
+                for dy in range(-outline_w, outline_w + 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    shifted = rect.translated(dx, dy)
+                    painter.drawText(shifted, Qt.AlignmentFlag.AlignCenter, elem.text)
+
+        # Основной текст
+        painter.setPen(QColor(elem.font_color))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, elem.text)
 
     # --- События мыши ---
     def mousePressEvent(self, event):

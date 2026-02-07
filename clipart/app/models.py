@@ -51,6 +51,18 @@ class OverlayElement:
     remove_bg: bool = False       # включить удаление фона
     bg_tolerance: int = 40        # допуск цвета (0‑255), чем больше — тем больше убирается
 
+    # --- Текстовый CTA ---
+    is_text: bool = False               # True = это текстовый элемент
+    text: str = ""                      # содержимое текста
+    font_family: str = "Arial"          # имя шрифта
+    font_size: int = 48                 # размер шрифта (pt)
+    font_color: str = "#FFFFFF"         # цвет текста (hex)
+    text_bold: bool = True              # жирный
+    text_italic: bool = False           # курсив
+    text_bg_color: str = ""             # цвет фона текста (пусто = прозрачный)
+    text_outline: bool = True           # обводка вокруг текста
+    text_outline_color: str = "#000000" # цвет обводки (hex)
+
     # --- Вспомогательные свойства ---
     @property
     def end_time(self) -> float:

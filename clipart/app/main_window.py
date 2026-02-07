@@ -28,6 +28,9 @@ from PyQt6.QtWidgets import (
     QLineEdit, QCheckBox, QScrollArea
 )
 
+import copy
+import uuid
+
 from app.models import (
     Project, OverlayElement, UndoRedoManager,
     save_last_preset, load_last_preset
@@ -64,6 +67,7 @@ class MainWindow(QMainWindow):
         self._placing_asset_name: Optional[str] = None
         self._placing_asset_path: Optional[str] = None
         self._last_rendered_path: Optional[str] = None
+        self._clipboard: Optional[dict] = None  # копия элемента для Ctrl+V
 
         # Определяем пути
         self._app_dir = Path(__file__).resolve().parent.parent
@@ -82,10 +86,11 @@ class MainWindow(QMainWindow):
         self._build_statusbar()
         self._connect_signals()
 
-        # Загрузка настроек вывода (префикс, пакетная обработка)
+        # Загрузка настроек вывода (префикс, папка, пакетная обработка)
         out_settings = load_output_settings()
         self._edit_prefix.setText(out_settings.get("prefix", "cta_"))
         self._chk_batch.setChecked(out_settings.get("batch", False))
+        self._edit_out_dir.setText(out_settings.get("out_dir", ""))
 
         # Загрузка последнего пресета наложений
         self._load_last_preset()
@@ -155,6 +160,18 @@ class MainWindow(QMainWindow):
         self._act_redo.setShortcut(QKeySequence("Ctrl+Y"))
         self._act_redo.triggered.connect(self._do_redo)
         edit_menu.addAction(self._act_redo)
+
+        edit_menu.addSeparator()
+
+        self._act_copy = QAction("Копировать элемент", self)
+        self._act_copy.setShortcut(QKeySequence("Ctrl+C"))
+        self._act_copy.triggered.connect(self._copy_element)
+        edit_menu.addAction(self._act_copy)
+
+        self._act_paste = QAction("Вставить элемент", self)
+        self._act_paste.setShortcut(QKeySequence("Ctrl+V"))
+        self._act_paste.triggered.connect(self._paste_element)
+        edit_menu.addAction(self._act_paste)
 
         # --- Вид ---
         view_menu = menubar.addMenu("Вид")
@@ -259,68 +276,103 @@ class MainWindow(QMainWindow):
         """Панель действий внизу окна (с настройками вывода)."""
         bar = QFrame()
         bar.setObjectName("bottomBar")
-        bar.setFixedHeight(52)
+        bar.setFixedHeight(82)
 
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(12, 6, 12, 6)
-        layout.setSpacing(10)
+        outer = QVBoxLayout(bar)
+        outer.setContentsMargins(12, 4, 12, 4)
+        outer.setSpacing(4)
 
-        # --- Кнопки файлов ---
-        btn_open = QPushButton("📂 Открыть видео")
-        btn_open.clicked.connect(self._open_video)
-        layout.addWidget(btn_open)
+        # --- Верхняя строка: папка сохранения ---
+        row_out = QHBoxLayout()
+        row_out.setSpacing(6)
 
-        btn_save = QPushButton("💾 Сохранить проект")
-        btn_save.clicked.connect(self._save_project)
-        layout.addWidget(btn_save)
+        lbl_out = QLabel("Сохранять в:")
+        lbl_out.setStyleSheet("color: #a6adc8; font-size: 12px;")
+        row_out.addWidget(lbl_out)
 
-        btn_load = QPushButton("📁 Открыть проект")
-        btn_load.clicked.connect(self._open_project)
-        layout.addWidget(btn_load)
+        self._edit_out_dir = QLineEdit()
+        self._edit_out_dir.setPlaceholderText("{папка видео}/out/  (по умолчанию)")
+        self._edit_out_dir.setToolTip(
+            "Папка для сохранения результатов.\n"
+            "Пустое поле = подпапка out/ рядом с исходным видео."
+        )
+        row_out.addWidget(self._edit_out_dir, stretch=1)
 
-        layout.addStretch()
+        btn_browse_out = QPushButton("📁")
+        btn_browse_out.setFixedSize(32, 28)
+        btn_browse_out.setToolTip("Выбрать папку сохранения")
+        btn_browse_out.clicked.connect(self._browse_output_dir)
+        row_out.addWidget(btn_browse_out)
 
-        # --- Настройки вывода ---
         lbl_prefix = QLabel("Префикс:")
-        lbl_prefix.setStyleSheet("color: #cdd6f4; font-size: 12px;")
-        layout.addWidget(lbl_prefix)
+        lbl_prefix.setStyleSheet("color: #a6adc8; font-size: 12px;")
+        row_out.addWidget(lbl_prefix)
 
         self._edit_prefix = QLineEdit("cta_")
         self._edit_prefix.setFixedWidth(80)
         self._edit_prefix.setToolTip(
             "Префикс для выходных файлов.\n"
-            "Результат: {префикс}{имя_видео}.mp4\n"
-            "Файлы сохраняются в папку out/ рядом с оригиналом."
+            "Результат: {префикс}{имя_видео}.mp4"
         )
-        layout.addWidget(self._edit_prefix)
+        row_out.addWidget(self._edit_prefix)
 
         self._chk_batch = QCheckBox("Все файлы в папке")
         self._chk_batch.setToolTip(
             "Обработать все видеофайлы в папке выбранного видео.\n"
-            "Каждый файл получит те же наложения.\n"
-            "Результаты → {папка_видео}/out/"
+            "Каждый файл получит те же наложения."
         )
-        layout.addWidget(self._chk_batch)
+        row_out.addWidget(self._chk_batch)
 
-        layout.addStretch()
+        outer.addLayout(row_out)
 
-        # --- Кнопки действий ---
+        # --- Нижняя строка: кнопки действий ---
+        row_btns = QHBoxLayout()
+        row_btns.setSpacing(10)
+
+        btn_open = QPushButton("📂 Открыть видео")
+        btn_open.clicked.connect(self._open_video)
+        row_btns.addWidget(btn_open)
+
+        btn_save = QPushButton("💾 Сохранить проект")
+        btn_save.clicked.connect(self._save_project)
+        row_btns.addWidget(btn_save)
+
+        btn_load = QPushButton("📁 Открыть проект")
+        btn_load.clicked.connect(self._open_project)
+        row_btns.addWidget(btn_load)
+
+        row_btns.addStretch()
+
         btn_preview = QPushButton("👁 Предпросмотр")
         btn_preview.clicked.connect(self._toggle_preview)
-        layout.addWidget(btn_preview)
+        row_btns.addWidget(btn_preview)
 
         btn_render = QPushButton("🎬 РЕНДЕРИТЬ")
         btn_render.setObjectName("btnRender")
         btn_render.clicked.connect(self._render_video)
-        layout.addWidget(btn_render)
+        row_btns.addWidget(btn_render)
 
         btn_github = QPushButton("🐙 GitHub")
         btn_github.setObjectName("btnGitHub")
         btn_github.clicked.connect(self._upload_to_github)
-        layout.addWidget(btn_github)
+        row_btns.addWidget(btn_github)
+
+        outer.addLayout(row_btns)
 
         # Добавляем панель в главный layout
         self.centralWidget().layout().addWidget(bar)
+
+    def _browse_output_dir(self):
+        """Диалог выбора папки сохранения."""
+        # Стартовая папка — текущая из поля, или папка видео, или home
+        current = self._edit_out_dir.text().strip()
+        if not current and self._project.video_path:
+            current = str(Path(self._project.video_path).parent / "out")
+        path = QFileDialog.getExistingDirectory(
+            self, "Выберите папку для сохранения", current
+        )
+        if path:
+            self._edit_out_dir.setText(path)
 
     def _build_statusbar(self):
         """Строка состояния."""
@@ -392,6 +444,10 @@ class MainWindow(QMainWindow):
             self._preview.set_project(self._project)
             # Передаём длительность видео в свойства для «До конца видео»
             self._properties.set_video_duration(self._preview.duration)
+            # Подставляем папку вывода по умолчанию если поле пустое
+            if not self._edit_out_dir.text().strip():
+                default_out = str(Path(path).parent / "out")
+                self._edit_out_dir.setPlaceholderText(default_out)
             self._undo.save_state(self._project)
             self._statusbar.showMessage(
                 f"Видео загружено: {Path(path).name} "
@@ -424,15 +480,19 @@ class MainWindow(QMainWindow):
         if not self._placing_asset_name:
             return
 
+        is_text = (self._placing_asset_path == "__TEXT__")
+
         elem = OverlayElement(
-            name=self._placing_asset_name,
-            file_path=self._placing_asset_path if self._placing_asset_path != "__TEXT__" else "",
+            name=self._placing_asset_name if not is_text else "Текст CTA",
+            file_path="" if is_text else self._placing_asset_path,
             start_time=self._preview.current_time,
             duration=3.0,
             x_percent=x_pct,
             y_percent=y_pct,
             scale=100.0,
             opacity=100.0,
+            is_text=is_text,
+            text="ПОДПИСАТЬСЯ" if is_text else "",
         )
 
         self._project.add_element(elem)
@@ -442,6 +502,8 @@ class MainWindow(QMainWindow):
         self._placing_asset_path = None
 
         self._update_all()
+        # Сразу выбираем элемент и показываем свойства
+        self._on_element_selected(elem.id)
         self._statusbar.showMessage(f"Элемент «{elem.name}» добавлен.")
 
     # --- Перемещение элемента ---
@@ -491,6 +553,41 @@ class MainWindow(QMainWindow):
         if self._project.move_element_down(elem_id):
             self._undo.save_state(self._project)
             self._update_table()
+
+    # --- Копирование / Вставка ---
+    def _copy_element(self):
+        """Копировать выбранный элемент в буфер."""
+        if not self._selected_element_id:
+            self._statusbar.showMessage("Нет выбранного элемента для копирования.")
+            return
+        elem = self._project.get_element(self._selected_element_id)
+        if elem:
+            self._clipboard = elem.to_dict()
+            self._statusbar.showMessage(f"Скопирован: «{elem.name}»")
+
+    def _paste_element(self):
+        """Вставить элемент из буфера со сдвигом позиции."""
+        if not self._clipboard:
+            self._statusbar.showMessage("Буфер пуст — сначала скопируйте элемент (Ctrl+C).")
+            return
+        if not self._project.video_path:
+            self._statusbar.showMessage("Сначала откройте видеофайл.")
+            return
+
+        new_elem = OverlayElement.from_dict(self._clipboard)
+        new_elem.id = str(uuid.uuid4())
+        # Сдвигаем позицию чуть правее и ниже, чтобы было видно
+        new_elem.x_percent = min(95, new_elem.x_percent + 3)
+        new_elem.y_percent = min(95, new_elem.y_percent + 3)
+        # Ставим на текущее время
+        new_elem.start_time = self._preview.current_time
+
+        self._project.add_element(new_elem)
+        self._undo.save_state(self._project)
+        self._selected_element_id = new_elem.id
+        self._update_all()
+        self._on_element_selected(new_elem.id)
+        self._statusbar.showMessage(f"Вставлен: «{new_elem.name}»")
 
     # --- Undo / Redo ---
     def _do_undo(self):
@@ -606,9 +703,10 @@ class MainWindow(QMainWindow):
         batch = self._chk_batch.isChecked()
         use_gpu = load_gpu_setting()
 
-        # Папка вывода: {папка_видео}/out/
+        # Папка вывода: из поля, или {папка_видео}/out/ по умолчанию
         video_dir = str(Path(self._project.video_path).parent)
-        out_dir = str(Path(video_dir) / "out")
+        custom_out = self._edit_out_dir.text().strip()
+        out_dir = custom_out if custom_out else str(Path(video_dir) / "out")
 
         # Останавливаем воспроизведение
         self._preview.pause()
@@ -782,7 +880,8 @@ class MainWindow(QMainWindow):
         # Сохраняем настройки вывода
         save_output_settings(
             self._edit_prefix.text().strip() or "cta_",
-            self._chk_batch.isChecked()
+            self._chk_batch.isChecked(),
+            self._edit_out_dir.text().strip()
         )
 
         # Сохраняем пресет наложений (если есть элементы)

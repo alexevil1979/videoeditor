@@ -18,7 +18,8 @@ from PyQt6.QtGui import QIcon, QPixmap, QImage, QColor, QPainter, QFont
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QPushButton, QDoubleSpinBox, QSlider, QGroupBox, QFormLayout,
-    QFileDialog, QScrollArea, QFrame, QCheckBox, QSizePolicy, QSpinBox
+    QFileDialog, QScrollArea, QFrame, QCheckBox, QSizePolicy, QSpinBox,
+    QLineEdit, QComboBox, QFontComboBox, QColorDialog
 )
 
 from app.models import OverlayElement
@@ -218,7 +219,6 @@ class ElementProperties(QGroupBox):
         form.addRow("Fade Out:", self.spin_fade_out)
 
         # --- Удаление фона ---
-        from PyQt6.QtWidgets import QCheckBox
         self.chk_remove_bg = QCheckBox("Удалить фон")
         self.chk_remove_bg.setToolTip(
             "Автоматически убирает однотонный фон GIF/PNG\n"
@@ -240,6 +240,121 @@ class ElementProperties(QGroupBox):
         bg_row.addWidget(self.slider_bg_tolerance)
         bg_row.addWidget(self.lbl_bg_tol)
         form.addRow("Допуск фона:", bg_row)
+
+        # ===== СЕКЦИЯ ТЕКСТОВОГО CTA =====
+        self._text_separator = QLabel("── ТЕКСТ ──")
+        self._text_separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._text_separator.setStyleSheet("color: #a6adc8; margin-top: 10px;")
+        form.addRow(self._text_separator)
+
+        # Текст
+        self.edit_text = QLineEdit()
+        self.edit_text.setPlaceholderText("Введите текст CTA…")
+        self.edit_text.textChanged.connect(self._on_text_change)
+        form.addRow("Текст:", self.edit_text)
+
+        # Шрифт
+        self.combo_font = QFontComboBox()
+        self.combo_font.setCurrentFont(QFont("Arial"))
+        self.combo_font.currentFontChanged.connect(self._on_text_change)
+        form.addRow("Шрифт:", self.combo_font)
+
+        # Размер шрифта
+        self.spin_font_size = QSpinBox()
+        self.spin_font_size.setRange(8, 200)
+        self.spin_font_size.setValue(48)
+        self.spin_font_size.setSuffix(" pt")
+        self.spin_font_size.valueChanged.connect(self._on_text_change)
+        form.addRow("Размер:", self.spin_font_size)
+
+        # Цвет текста
+        self._font_color = "#FFFFFF"
+        self.btn_font_color = QPushButton("⬜ Белый")
+        self.btn_font_color.setToolTip("Выбрать цвет текста")
+        self.btn_font_color.clicked.connect(self._pick_font_color)
+        form.addRow("Цвет:", self.btn_font_color)
+
+        # Жирный / Курсив
+        style_row = QHBoxLayout()
+        self.chk_bold = QCheckBox("Жирный")
+        self.chk_bold.setChecked(True)
+        self.chk_bold.stateChanged.connect(self._on_text_change)
+        style_row.addWidget(self.chk_bold)
+        self.chk_italic = QCheckBox("Курсив")
+        self.chk_italic.stateChanged.connect(self._on_text_change)
+        style_row.addWidget(self.chk_italic)
+        form.addRow("Стиль:", style_row)
+
+        # Обводка
+        outline_row = QHBoxLayout()
+        self.chk_outline = QCheckBox("Обводка")
+        self.chk_outline.setChecked(True)
+        self.chk_outline.stateChanged.connect(self._on_text_change)
+        outline_row.addWidget(self.chk_outline)
+
+        self._outline_color = "#000000"
+        self.btn_outline_color = QPushButton("⬛")
+        self.btn_outline_color.setFixedWidth(40)
+        self.btn_outline_color.setToolTip("Цвет обводки")
+        self.btn_outline_color.clicked.connect(self._pick_outline_color)
+        outline_row.addWidget(self.btn_outline_color)
+        form.addRow("Обводка:", outline_row)
+
+        # Фон текста
+        bg_text_row = QHBoxLayout()
+        self.chk_text_bg = QCheckBox("Фон")
+        self.chk_text_bg.stateChanged.connect(self._on_text_change)
+        bg_text_row.addWidget(self.chk_text_bg)
+
+        self._text_bg_color = "#000000"
+        self.btn_text_bg_color = QPushButton("⬛")
+        self.btn_text_bg_color.setFixedWidth(40)
+        self.btn_text_bg_color.setToolTip("Цвет фона текста")
+        self.btn_text_bg_color.clicked.connect(self._pick_text_bg_color)
+        bg_text_row.addWidget(self.btn_text_bg_color)
+        form.addRow("Фон текста:", bg_text_row)
+
+        # ===== ПРЕДУСТАНОВЛЕННЫЕ ПОЗИЦИИ =====
+        self._pos_separator = QLabel("── ПОЗИЦИЯ ──")
+        self._pos_separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._pos_separator.setStyleSheet("color: #a6adc8; margin-top: 10px;")
+        form.addRow(self._pos_separator)
+
+        preset_grid_1 = QHBoxLayout()
+        for label, x, y in [("↖", 15, 15), ("↑", 50, 10), ("↗", 85, 15)]:
+            btn = QPushButton(label)
+            btn.setFixedSize(48, 32)
+            btn.setToolTip(f"Позиция: X={x}%, Y={y}%")
+            btn.clicked.connect(lambda _, px=x, py=y: self._set_position_preset(px, py))
+            preset_grid_1.addWidget(btn)
+        form.addRow(preset_grid_1)
+
+        preset_grid_2 = QHBoxLayout()
+        for label, x, y in [("←", 15, 50), ("⊙", 50, 50), ("→", 85, 50)]:
+            btn = QPushButton(label)
+            btn.setFixedSize(48, 32)
+            btn.setToolTip(f"Позиция: X={x}%, Y={y}%")
+            btn.clicked.connect(lambda _, px=x, py=y: self._set_position_preset(px, py))
+            preset_grid_2.addWidget(btn)
+        form.addRow(preset_grid_2)
+
+        preset_grid_3 = QHBoxLayout()
+        for label, x, y in [("↙", 15, 85), ("↓ ⅓", 50, 82), ("↘", 85, 85)]:
+            btn = QPushButton(label)
+            btn.setFixedSize(48, 32)
+            btn.setToolTip(f"Позиция: X={x}%, Y={y}%")
+            btn.clicked.connect(lambda _, px=x, py=y: self._set_position_preset(px, py))
+            preset_grid_3.addWidget(btn)
+        form.addRow(preset_grid_3)
+
+        # Виджеты текстовых свойств — для скрытия/показа
+        self._text_widgets = [
+            self._text_separator, self.edit_text, self.combo_font,
+            self.spin_font_size, self.btn_font_color,
+            self.chk_bold, self.chk_italic,
+            self.chk_outline, self.btn_outline_color,
+            self.chk_text_bg, self.btn_text_bg_color,
+        ]
 
         # Скрыть, пока ничего не выбрано
         self._set_enabled(False)
@@ -269,9 +384,35 @@ class ElementProperties(QGroupBox):
             self.chk_remove_bg.setChecked(self._element.remove_bg)
             self.slider_bg_tolerance.setValue(self._element.bg_tolerance)
             self.lbl_bg_tol.setText(str(self._element.bg_tolerance))
+
+            # --- Текстовые свойства ---
+            is_text = self._element.is_text
+            self._show_text_widgets(is_text)
+            if is_text:
+                self.edit_text.setText(self._element.text)
+                self.combo_font.setCurrentFont(QFont(self._element.font_family))
+                self.spin_font_size.setValue(self._element.font_size)
+                self._font_color = self._element.font_color
+                self._update_color_btn(self.btn_font_color, self._font_color)
+                self.chk_bold.setChecked(self._element.text_bold)
+                self.chk_italic.setChecked(self._element.text_italic)
+                self.chk_outline.setChecked(self._element.text_outline)
+                self._outline_color = self._element.text_outline_color
+                self._update_color_btn(self.btn_outline_color, self._outline_color)
+                has_bg = bool(self._element.text_bg_color)
+                self.chk_text_bg.setChecked(has_bg)
+                if has_bg:
+                    self._text_bg_color = self._element.text_bg_color
+                    self._update_color_btn(self.btn_text_bg_color, self._text_bg_color)
+            # Скрыть удаление фона для текста (не нужно)
+            self.chk_remove_bg.setVisible(not is_text)
+            self.slider_bg_tolerance.parentWidget()  # keep
+            for w in [self.chk_remove_bg, self.slider_bg_tolerance, self.lbl_bg_tol]:
+                w.setVisible(not is_text)
         else:
             self._set_enabled(False)
             self.lbl_name.setText("—")
+            self._show_text_widgets(False)
         self._updating = False
 
     def _set_enabled(self, on: bool):
@@ -279,11 +420,35 @@ class ElementProperties(QGroupBox):
                   self.spin_scale, self.spin_x, self.spin_y,
                   self.spin_fade_in, self.spin_fade_out,
                   self.chk_remove_bg, self.slider_bg_tolerance,
-                  self.chk_until_end):
+                  self.chk_until_end,
+                  self.edit_text, self.combo_font, self.spin_font_size,
+                  self.btn_font_color, self.chk_bold, self.chk_italic,
+                  self.chk_outline, self.btn_outline_color,
+                  self.chk_text_bg, self.btn_text_bg_color):
             w.setEnabled(on)
         # Если «до конца видео» — спинбокс длительности заблокирован
         if on and self._element and self._element.until_end:
             self.spin_duration.setEnabled(False)
+
+    def _show_text_widgets(self, show: bool):
+        """Показать/скрыть виджеты текстовых свойств."""
+        for w in self._text_widgets:
+            w.setVisible(show)
+
+    def _update_color_btn(self, btn: QPushButton, hex_color: str):
+        """Обновить текст и стиль кнопки выбора цвета."""
+        name = QColor(hex_color).name()
+        btn.setStyleSheet(
+            f"background-color: {name}; color: {'#000' if self._is_light(name) else '#fff'}; "
+            f"border: 1px solid #585b70; border-radius: 4px; padding: 2px 6px;"
+        )
+        btn.setText(name)
+
+    @staticmethod
+    def _is_light(hex_color: str) -> bool:
+        """Определяет, светлый ли цвет."""
+        c = QColor(hex_color)
+        return (c.red() * 0.299 + c.green() * 0.587 + c.blue() * 0.114) > 150
 
     def set_video_duration(self, duration: float):
         """Сохраняет длительность видео для пересчёта 'до конца'."""
@@ -340,6 +505,57 @@ class ElementProperties(QGroupBox):
         # Сбрасываем кеш пиксмапов для этого файла, чтобы пересчитать
         from app.video_preview import gif_cache
         gif_cache.invalidate(self._element.file_path)
+        self.property_changed.emit()
+
+    def _on_text_change(self):
+        """Вызывается при изменении текстовых свойств."""
+        if self._updating or not self._element or not self._element.is_text:
+            return
+        self._element.text = self.edit_text.text()
+        self._element.font_family = self.combo_font.currentFont().family()
+        self._element.font_size = self.spin_font_size.value()
+        self._element.font_color = self._font_color
+        self._element.text_bold = self.chk_bold.isChecked()
+        self._element.text_italic = self.chk_italic.isChecked()
+        self._element.text_outline = self.chk_outline.isChecked()
+        self._element.text_outline_color = self._outline_color
+        self._element.text_bg_color = self._text_bg_color if self.chk_text_bg.isChecked() else ""
+        self.property_changed.emit()
+
+    def _pick_font_color(self):
+        """Открыть палитру выбора цвета текста."""
+        color = QColorDialog.getColor(QColor(self._font_color), self, "Цвет текста")
+        if color.isValid():
+            self._font_color = color.name()
+            self._update_color_btn(self.btn_font_color, self._font_color)
+            self._on_text_change()
+
+    def _pick_outline_color(self):
+        """Открыть палитру выбора цвета обводки."""
+        color = QColorDialog.getColor(QColor(self._outline_color), self, "Цвет обводки")
+        if color.isValid():
+            self._outline_color = color.name()
+            self._update_color_btn(self.btn_outline_color, self._outline_color)
+            self._on_text_change()
+
+    def _pick_text_bg_color(self):
+        """Открыть палитру выбора цвета фона текста."""
+        color = QColorDialog.getColor(QColor(self._text_bg_color), self, "Фон текста")
+        if color.isValid():
+            self._text_bg_color = color.name()
+            self._update_color_btn(self.btn_text_bg_color, self._text_bg_color)
+            self._on_text_change()
+
+    def _set_position_preset(self, x: float, y: float):
+        """Установить предустановленную позицию элемента."""
+        if not self._element:
+            return
+        self._element.x_percent = x
+        self._element.y_percent = y
+        self._updating = True
+        self.spin_x.setValue(x)
+        self.spin_y.setValue(y)
+        self._updating = False
         self.property_changed.emit()
 
     def update_position(self, x: float, y: float):
