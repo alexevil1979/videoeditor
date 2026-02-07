@@ -33,6 +33,7 @@ class OverlayElement:
     # Временные параметры (в секундах)
     start_time: float = 0.0
     duration: float = 3.0
+    until_end: bool = False       # если True — длительность = до конца видео
 
     # Позиция (в процентах от размера видео, 0‑100)
     x_percent: float = 50.0

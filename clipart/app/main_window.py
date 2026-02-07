@@ -290,6 +290,8 @@ class MainWindow(QMainWindow):
                 self._preview.total_frames, self._preview.fps
             )
             self._preview.set_project(self._project)
+            # Передаём длительность видео в сайдбар для «До конца видео»
+            self._sidebar.properties.set_video_duration(self._preview.duration)
             self._undo.save_state(self._project)
             self._statusbar.showMessage(
                 f"Видео загружено: {Path(path).name} "
@@ -469,6 +471,7 @@ class MainWindow(QMainWindow):
                 self._playback_bar.set_duration(
                     self._preview.total_frames, self._preview.fps
                 )
+                self._sidebar.properties.set_video_duration(self._preview.duration)
 
             self._selected_element_id = None
             self._sidebar.properties.set_element(None)

@@ -146,14 +146,23 @@ class ElementProperties(QGroupBox):
         self.spin_start.valueChanged.connect(self._on_change)
         form.addRow("Начало:", self.spin_start)
 
-        # Длительность (сек)
+        # Длительность (сек) + галка «до конца»
         self.spin_duration = QDoubleSpinBox()
         self.spin_duration.setRange(0.1, 99999)
         self.spin_duration.setDecimals(1)
         self.spin_duration.setSuffix(" сек")
         self.spin_duration.setSingleStep(0.5)
         self.spin_duration.valueChanged.connect(self._on_change)
-        form.addRow("Длительность:", self.spin_duration)
+
+        from PyQt6.QtWidgets import QCheckBox
+        self.chk_until_end = QCheckBox("До конца видео")
+        self.chk_until_end.setToolTip("Элемент будет виден до конца видео")
+        self.chk_until_end.stateChanged.connect(self._on_until_end_changed)
+
+        dur_row = QHBoxLayout()
+        dur_row.addWidget(self.spin_duration)
+        dur_row.addWidget(self.chk_until_end)
+        form.addRow("Длительность:", dur_row)
 
         # Прозрачность (%)
         self.slider_opacity = QSlider(Qt.Orientation.Horizontal)
@@ -247,6 +256,8 @@ class ElementProperties(QGroupBox):
             self.lbl_name.setText(self._element.name or "—")
             self.spin_start.setValue(self._element.start_time)
             self.spin_duration.setValue(self._element.duration)
+            self.chk_until_end.setChecked(self._element.until_end)
+            self.spin_duration.setEnabled(not self._element.until_end)
             self.slider_opacity.setValue(int(self._element.opacity))
             self.lbl_opacity.setText(f"{int(self._element.opacity)}%")
             self.spin_scale.setValue(self._element.scale)
@@ -266,15 +277,24 @@ class ElementProperties(QGroupBox):
         for w in (self.spin_start, self.spin_duration, self.slider_opacity,
                   self.spin_scale, self.spin_x, self.spin_y,
                   self.spin_fade_in, self.spin_fade_out,
-                  self.chk_remove_bg, self.slider_bg_tolerance):
+                  self.chk_remove_bg, self.slider_bg_tolerance,
+                  self.chk_until_end):
             w.setEnabled(on)
+        # Если «до конца видео» — спинбокс длительности заблокирован
+        if on and self._element and self._element.until_end:
+            self.spin_duration.setEnabled(False)
+
+    def set_video_duration(self, duration: float):
+        """Сохраняет длительность видео для пересчёта 'до конца'."""
+        self._video_duration = duration
 
     def _on_change(self):
         """Вызывается при изменении любого свойства пользователем."""
         if self._updating or not self._element:
             return
         self._element.start_time = self.spin_start.value()
-        self._element.duration = self.spin_duration.value()
+        if not self._element.until_end:
+            self._element.duration = self.spin_duration.value()
         self._element.opacity = self.slider_opacity.value()
         self.lbl_opacity.setText(f"{self.slider_opacity.value()}%")
         self._element.scale = self.spin_scale.value()
@@ -282,7 +302,32 @@ class ElementProperties(QGroupBox):
         self._element.y_percent = self.spin_y.value()
         self._element.fade_in = self.spin_fade_in.value()
         self._element.fade_out = self.spin_fade_out.value()
+
+        # Пересчитываем длительность если «до конца»
+        if self._element.until_end:
+            self._recalc_until_end()
+
         self.property_changed.emit()
+
+    def _on_until_end_changed(self):
+        """Вызывается при переключении галки 'До конца видео'."""
+        if self._updating or not self._element:
+            return
+        self._element.until_end = self.chk_until_end.isChecked()
+        self.spin_duration.setEnabled(not self._element.until_end)
+        if self._element.until_end:
+            self._recalc_until_end()
+        self.property_changed.emit()
+
+    def _recalc_until_end(self):
+        """Пересчитывает длительность = (конец видео) - (начало элемента)."""
+        video_dur = getattr(self, '_video_duration', 0.0)
+        if video_dur > 0:
+            new_dur = max(0.1, video_dur - self._element.start_time)
+            self._element.duration = round(new_dur, 1)
+            self._updating = True
+            self.spin_duration.setValue(self._element.duration)
+            self._updating = False
 
     def _on_bg_change(self):
         """Вызывается при изменении настроек удаления фона."""
