@@ -221,3 +221,43 @@ class UndoRedoManager:
     def clear(self) -> None:
         self._history.clear()
         self._index = -1
+
+
+# ---------------------------------------------------------------------------
+# Сохранение/загрузка последнего пресета наложений
+# ---------------------------------------------------------------------------
+_PRESET_PATH = Path(__file__).resolve().parent.parent / "last_overlay.json"
+
+
+def save_last_preset(elements: List[OverlayElement]) -> None:
+    """
+    Сохраняет текущий набор наложений как последний использованный пресет.
+    Файл: last_overlay.json в корне проекта.
+    При следующем запуске приложения — автоматически загрузится.
+    """
+    data = [e.to_dict() for e in elements]
+    try:
+        with open(_PRESET_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def load_last_preset() -> List[OverlayElement]:
+    """
+    Загружает последний использованный пресет наложений.
+    Генерирует новые ID для элементов, чтобы избежать конфликтов.
+    """
+    if not _PRESET_PATH.exists():
+        return []
+    try:
+        with open(_PRESET_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        elements = []
+        for d in data:
+            elem = OverlayElement.from_dict(d)
+            elem.id = str(uuid.uuid4())  # новый уникальный ID
+            elements.append(elem)
+        return elements
+    except Exception:
+        return []

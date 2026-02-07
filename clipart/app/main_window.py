@@ -2,6 +2,14 @@
 main_window.py — Главное окно приложения Video CTA Overlay Editor.
 
 Компонует все виджеты, связывает сигналы, реализует основную логику.
+Макет: Библиотека (лево) | Видео (центр) | Свойства (право)
+
+Новые функции:
+  • Трёхколоночный layout: библиотека | видео | свойства
+  • Сохранение/загрузка последнего пресета наложений (автозагрузка при старте)
+  • Пакетная обработка всех видео в папке
+  • Выбор префикса для выходных файлов
+  • Сохранение в папку out/ рядом с исходным видео
 """
 
 from __future__ import annotations
@@ -16,14 +24,21 @@ from PyQt6.QtGui import QAction, QKeySequence, QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QPushButton, QFileDialog, QMessageBox, QFrame, QLabel,
-    QStatusBar, QMenuBar, QToolBar, QApplication
+    QStatusBar, QMenuBar, QToolBar, QApplication,
+    QLineEdit, QCheckBox, QScrollArea
 )
 
-from app.models import Project, OverlayElement, UndoRedoManager
+from app.models import (
+    Project, OverlayElement, UndoRedoManager,
+    save_last_preset, load_last_preset
+)
 from app.video_preview import VideoPreviewWidget, PlaybackControlBar
-from app.sidebar import SidebarWidget
+from app.sidebar import ElementLibrary, ElementProperties
 from app.elements_table import ElementsTableWidget
-from app.render_engine import RenderWorker, load_gpu_setting
+from app.render_engine import (
+    RenderWorker, BatchRenderWorker, load_gpu_setting,
+    find_video_files, load_output_settings, save_output_settings
+)
 from app.github_upload import (
     GitHubUploadWorker, load_github_settings, GITHUB_REPO_URL
 )
@@ -48,6 +63,7 @@ class MainWindow(QMainWindow):
         self._selected_element_id: Optional[str] = None
         self._placing_asset_name: Optional[str] = None
         self._placing_asset_path: Optional[str] = None
+        self._last_rendered_path: Optional[str] = None
 
         # Определяем пути
         self._app_dir = Path(__file__).resolve().parent.parent
@@ -66,9 +82,32 @@ class MainWindow(QMainWindow):
         self._build_statusbar()
         self._connect_signals()
 
+        # Загрузка настроек вывода (префикс, пакетная обработка)
+        out_settings = load_output_settings()
+        self._edit_prefix.setText(out_settings.get("prefix", "cta_"))
+        self._chk_batch.setChecked(out_settings.get("batch", False))
+
+        # Загрузка последнего пресета наложений
+        self._load_last_preset()
+
         # Начальное состояние
         self._undo.save_state(self._project)
         self._update_all()
+
+    def _load_last_preset(self):
+        """Загружает последний использованный набор наложений при старте."""
+        last_elements = load_last_preset()
+        if last_elements:
+            for elem in last_elements:
+                self._project.add_element(elem)
+            self._statusbar.showMessage(
+                f"Загружен последний пресет: {len(last_elements)} элемент(ов). "
+                "Откройте видеофайл для начала работы."
+            )
+        else:
+            self._statusbar.showMessage(
+                "Готово. Откройте видеофайл для начала работы."
+            )
 
     # ===================================================================
     # Построение интерфейса
@@ -138,43 +177,80 @@ class MainWindow(QMainWindow):
         menubar.addAction(act_about)
 
     def _build_ui(self):
-        """Строит центральную часть интерфейса."""
+        """Строит центральную часть: Библиотека (лево) | Видео (центр) | Свойства (право)."""
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Верхняя часть: сайдбар + превью
+        # === Трёхколоночный сплиттер ===
         top_splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        # Сайдбар
-        self._sidebar = SidebarWidget(self._assets_dir)
-        top_splitter.addWidget(self._sidebar)
+        # --- ЛЕВАЯ КОЛОНКА: Библиотека элементов ---
+        left_panel = QFrame()
+        left_panel.setObjectName("sidebar")
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(6, 6, 6, 6)
+        left_layout.setSpacing(0)
 
-        # Правая часть: превью + контроли
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(0)
+        self._library = ElementLibrary(self._assets_dir)
+        left_layout.addWidget(self._library)
+
+        top_splitter.addWidget(left_panel)
+
+        # --- ЦЕНТРАЛЬНАЯ КОЛОНКА: Видео превью ---
+        center_panel = QWidget()
+        center_layout = QVBoxLayout(center_panel)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
 
         self._preview = VideoPreviewWidget()
-        right_layout.addWidget(self._preview, stretch=1)
+        center_layout.addWidget(self._preview, stretch=1)
 
         self._playback_bar = PlaybackControlBar()
-        right_layout.addWidget(self._playback_bar)
+        center_layout.addWidget(self._playback_bar)
+
+        top_splitter.addWidget(center_panel)
+
+        # --- ПРАВАЯ КОЛОНКА: Свойства элемента ---
+        right_panel = QFrame()
+        right_panel.setObjectName("sidebar")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(6, 6, 6, 6)
+        right_layout.setSpacing(0)
+
+        # Прокрутка для свойств
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+
+        self._properties = ElementProperties()
+        container_layout.addWidget(self._properties)
+        container_layout.addStretch()
+
+        scroll.setWidget(container)
+        right_layout.addWidget(scroll)
 
         top_splitter.addWidget(right_panel)
 
-        # Пропорции сплиттера
-        top_splitter.setSizes([320, 960])
-        top_splitter.setStretchFactor(0, 0)
-        top_splitter.setStretchFactor(1, 1)
+        # Пропорции сплиттера: библиотека 240 | видео 700 | свойства 300
+        top_splitter.setSizes([240, 700, 300])
+        top_splitter.setStretchFactor(0, 0)   # библиотека фиксированная
+        top_splitter.setStretchFactor(1, 1)   # видео растягивается
+        top_splitter.setStretchFactor(2, 0)   # свойства фиксированные
 
-        # Нижняя часть: таблица элементов
+        # --- Нижняя часть: таблица элементов ---
         self._elements_table = ElementsTableWidget()
 
-        # Вертикальный сплиттер: превью | таблица
+        # Вертикальный сплиттер: (библ|видео|свойства) | таблица
         v_splitter = QSplitter(Qt.Orientation.Vertical)
         v_splitter.addWidget(top_splitter)
         v_splitter.addWidget(self._elements_table)
@@ -185,7 +261,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(v_splitter, stretch=1)
 
     def _build_bottom_bar(self):
-        """Панель действий внизу окна."""
+        """Панель действий внизу окна (с настройками вывода)."""
         bar = QFrame()
         bar.setObjectName("bottomBar")
         bar.setFixedHeight(52)
@@ -194,6 +270,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(10)
 
+        # --- Кнопки файлов ---
         btn_open = QPushButton("📂 Открыть видео")
         btn_open.clicked.connect(self._open_video)
         layout.addWidget(btn_open)
@@ -208,16 +285,41 @@ class MainWindow(QMainWindow):
 
         layout.addStretch()
 
+        # --- Настройки вывода ---
+        lbl_prefix = QLabel("Префикс:")
+        lbl_prefix.setStyleSheet("color: #cdd6f4; font-size: 12px;")
+        layout.addWidget(lbl_prefix)
+
+        self._edit_prefix = QLineEdit("cta_")
+        self._edit_prefix.setFixedWidth(80)
+        self._edit_prefix.setToolTip(
+            "Префикс для выходных файлов.\n"
+            "Результат: {префикс}{имя_видео}.mp4\n"
+            "Файлы сохраняются в папку out/ рядом с оригиналом."
+        )
+        layout.addWidget(self._edit_prefix)
+
+        self._chk_batch = QCheckBox("Все файлы в папке")
+        self._chk_batch.setToolTip(
+            "Обработать все видеофайлы в папке выбранного видео.\n"
+            "Каждый файл получит те же наложения.\n"
+            "Результаты → {папка_видео}/out/"
+        )
+        layout.addWidget(self._chk_batch)
+
+        layout.addStretch()
+
+        # --- Кнопки действий ---
         btn_preview = QPushButton("👁 Предпросмотр")
         btn_preview.clicked.connect(self._toggle_preview)
         layout.addWidget(btn_preview)
 
-        btn_render = QPushButton("🎬 РЕНДЕРИТЬ ВИДЕО")
+        btn_render = QPushButton("🎬 РЕНДЕРИТЬ")
         btn_render.setObjectName("btnRender")
         btn_render.clicked.connect(self._render_video)
         layout.addWidget(btn_render)
 
-        btn_github = QPushButton("🐙 Выгрузить на GitHub")
+        btn_github = QPushButton("🐙 GitHub")
         btn_github.setObjectName("btnGitHub")
         btn_github.clicked.connect(self._upload_to_github)
         layout.addWidget(btn_github)
@@ -229,15 +331,16 @@ class MainWindow(QMainWindow):
         """Строка состояния."""
         self._statusbar = QStatusBar()
         self.setStatusBar(self._statusbar)
-        self._statusbar.showMessage("Готово. Откройте видеофайл для начала работы.")
 
     # ===================================================================
     # Подключение сигналов
     # ===================================================================
     def _connect_signals(self):
-        # --- Сайдбар ---
-        self._sidebar.element_activated.connect(self._on_element_activated)
-        self._sidebar.property_changed.connect(self._on_property_changed)
+        # --- Библиотека (левая панель) ---
+        self._library.element_activated.connect(self._on_element_activated)
+
+        # --- Свойства (правая панель) ---
+        self._properties.property_changed.connect(self._on_property_changed)
 
         # --- Превью ---
         self._preview.element_placed.connect(self._on_element_placed)
@@ -250,7 +353,9 @@ class MainWindow(QMainWindow):
         # --- Playback ---
         self._playback_bar.btn_play.clicked.connect(self._preview.toggle_play)
         self._playback_bar.btn_back.clicked.connect(
-            lambda: self._preview.seek(max(0, self._preview._current_frame - int(self._preview.fps * 5)))
+            lambda: self._preview.seek(
+                max(0, self._preview._current_frame - int(self._preview.fps * 5))
+            )
         )
         self._playback_bar.btn_forward.clicked.connect(
             lambda: self._preview.seek(
@@ -290,8 +395,8 @@ class MainWindow(QMainWindow):
                 self._preview.total_frames, self._preview.fps
             )
             self._preview.set_project(self._project)
-            # Передаём длительность видео в сайдбар для «До конца видео»
-            self._sidebar.properties.set_video_duration(self._preview.duration)
+            # Передаём длительность видео в свойства для «До конца видео»
+            self._properties.set_video_duration(self._preview.duration)
             self._undo.save_state(self._project)
             self._statusbar.showMessage(
                 f"Видео загружено: {Path(path).name} "
@@ -346,20 +451,20 @@ class MainWindow(QMainWindow):
 
     # --- Перемещение элемента ---
     def _on_element_moved(self, elem_id: str, x: float, y: float):
-        self._sidebar.properties.update_position(x, y)
+        self._properties.update_position(x, y)
         self._update_table()
         self._preview.update()
 
     # --- Масштабирование элемента ---
     def _on_element_scaled(self, elem_id: str, scale: float):
-        self._sidebar.properties.update_scale(scale)
+        self._properties.update_scale(scale)
         self._update_table()
 
     # --- Выбор элемента ---
     def _on_element_selected(self, elem_id: str):
         self._selected_element_id = elem_id
         elem = self._project.get_element(elem_id)
-        self._sidebar.properties.set_element(elem)
+        self._properties.set_element(elem)
         self._preview.set_selected(elem_id)
         self._elements_table.highlight_row(elem_id)
 
@@ -376,7 +481,7 @@ class MainWindow(QMainWindow):
             self._undo.save_state(self._project)
             if self._selected_element_id == elem_id:
                 self._selected_element_id = None
-                self._sidebar.properties.set_element(None)
+                self._properties.set_element(None)
                 self._preview.set_selected(None)
             self._update_all()
             self._statusbar.showMessage(f"Элемент «{elem.name}» удалён.")
@@ -403,7 +508,7 @@ class MainWindow(QMainWindow):
                 self._project.video_path = old_video
             self._preview.set_project(self._project)
             self._selected_element_id = None
-            self._sidebar.properties.set_element(None)
+            self._properties.set_element(None)
             self._update_all()
             self._statusbar.showMessage("Отменено.")
 
@@ -413,7 +518,7 @@ class MainWindow(QMainWindow):
             self._project = restored
             self._preview.set_project(self._project)
             self._selected_element_id = None
-            self._sidebar.properties.set_element(None)
+            self._properties.set_element(None)
             self._update_all()
             self._statusbar.showMessage("Повторено.")
 
@@ -446,6 +551,8 @@ class MainWindow(QMainWindow):
         if path:
             try:
                 self._project.save(path)
+                # Также сохраняем как последний пресет
+                save_last_preset(self._project.elements)
                 self._statusbar.showMessage(f"Проект сохранён: {path}")
             except Exception as e:
                 QMessageBox.warning(self, "Ошибка",
@@ -471,18 +578,21 @@ class MainWindow(QMainWindow):
                 self._playback_bar.set_duration(
                     self._preview.total_frames, self._preview.fps
                 )
-                self._sidebar.properties.set_video_duration(self._preview.duration)
+                self._properties.set_video_duration(self._preview.duration)
 
             self._selected_element_id = None
-            self._sidebar.properties.set_element(None)
+            self._properties.set_element(None)
             self._update_all()
             self._statusbar.showMessage(f"Проект загружен: {path}")
         except Exception as e:
             QMessageBox.warning(self, "Ошибка",
                                 f"Не удалось открыть проект:\n{e}")
 
-    # --- Рендеринг ---
+    # ===================================================================
+    # Рендеринг
+    # ===================================================================
     def _render_video(self):
+        """Запуск рендеринга (одиночного или пакетного)."""
         if not self._project.video_path:
             QMessageBox.information(self, "Внимание",
                                     "Сначала откройте видеофайл.")
@@ -493,33 +603,86 @@ class MainWindow(QMainWindow):
                                     "Добавьте хотя бы один CTA-элемент.")
             return
 
-        # Имя выходного файла
-        base_name = Path(self._project.video_path).stem
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        out_name = f"{base_name}_with_cta_{date_str}.mp4"
+        # Сохраняем пресет наложений
+        save_last_preset(self._project.elements)
 
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить видео",
-            str(Path(self._outputs_dir) / out_name),
-            "Видео MP4 (*.mp4)"
-        )
-        if not path:
-            return
+        # Настройки вывода
+        prefix = self._edit_prefix.text().strip() or "cta_"
+        batch = self._chk_batch.isChecked()
+        use_gpu = load_gpu_setting()
+
+        # Папка вывода: {папка_видео}/out/
+        video_dir = str(Path(self._project.video_path).parent)
+        out_dir = str(Path(video_dir) / "out")
 
         # Останавливаем воспроизведение
         self._preview.pause()
 
-        # Диалог прогресса
+        if batch:
+            self._render_batch(video_dir, out_dir, prefix, use_gpu)
+        else:
+            self._render_single(out_dir, prefix, use_gpu)
+
+    def _render_single(self, out_dir: str, prefix: str, use_gpu: bool):
+        """Рендеринг одного файла → {out_dir}/{prefix}{name}.mp4"""
+        out_name = f"{prefix}{Path(self._project.video_path).stem}.mp4"
+        out_path = str(Path(out_dir) / out_name)
+
         dlg = RenderProgressDialog(self)
+        dlg.add_log(f"Вывод: {out_path}")
 
-        # Читаем настройку GPU из конфигурации
-        use_gpu = load_gpu_setting()
-
-        self._render_worker = RenderWorker(self._project, path, use_gpu=use_gpu)
+        self._render_worker = RenderWorker(
+            self._project, out_path, use_gpu=use_gpu
+        )
         self._render_worker.progress.connect(dlg.set_progress)
         self._render_worker.log.connect(dlg.add_log)
         self._render_worker.finished_ok.connect(
             lambda p: self._on_render_finished(p, dlg)
+        )
+        self._render_worker.error.connect(
+            lambda msg: self._on_render_error(msg, dlg)
+        )
+        dlg.btn_cancel.clicked.connect(lambda: dlg.close())
+
+        self._render_worker.start()
+        dlg.exec()
+
+    def _render_batch(self, video_dir: str, out_dir: str,
+                      prefix: str, use_gpu: bool):
+        """Пакетный рендеринг всех видео в папке → {out_dir}/{prefix}{name}.mp4"""
+        video_files = find_video_files(video_dir)
+        if not video_files:
+            QMessageBox.information(
+                self, "Внимание",
+                "Видеофайлы в папке не найдены."
+            )
+            return
+
+        # Подтверждение
+        answer = QMessageBox.question(
+            self, "Пакетная обработка",
+            f"Найдено {len(video_files)} видеофайл(ов) в папке:\n"
+            f"{video_dir}\n\n"
+            f"Результаты будут сохранены в:\n{out_dir}\n\n"
+            f"Префикс: «{prefix}»\n\n"
+            f"Начать обработку?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        elements_data = [e.to_dict() for e in self._project.elements]
+
+        dlg = RenderProgressDialog(self)
+        dlg.label.setText(f"Пакетная обработка: {len(video_files)} файл(ов)")
+
+        self._render_worker = BatchRenderWorker(
+            elements_data, video_files, out_dir, prefix, use_gpu
+        )
+        self._render_worker.progress.connect(dlg.set_progress)
+        self._render_worker.log.connect(dlg.add_log)
+        self._render_worker.finished_ok.connect(
+            lambda msg: self._on_batch_finished(msg, dlg)
         )
         self._render_worker.error.connect(
             lambda msg: self._on_render_error(msg, dlg)
@@ -534,12 +697,20 @@ class MainWindow(QMainWindow):
         self._statusbar.showMessage(f"Рендеринг завершён: {path}")
         self._last_rendered_path = path
 
+    def _on_batch_finished(self, msg: str, dlg: RenderProgressDialog):
+        """Пакетная обработка завершена."""
+        dlg.label.setText("✅ Пакетная обработка завершена!")
+        dlg.status_label.setText(msg)
+        dlg.progress_bar.setValue(100)
+        dlg.btn_cancel.setText("Закрыть")
+        self._statusbar.showMessage(msg)
+
     def _on_render_error(self, msg: str, dlg: RenderProgressDialog):
         dlg.set_error(msg)
 
     # --- Выгрузка на GitHub ---
     def _upload_to_github(self):
-        if not hasattr(self, '_last_rendered_path') or not self._last_rendered_path:
+        if not self._last_rendered_path:
             QMessageBox.information(
                 self, "Внимание",
                 "Сначала выполните рендеринг видео."
@@ -613,6 +784,16 @@ class MainWindow(QMainWindow):
 
     # --- Закрытие ---
     def closeEvent(self, event):
+        # Сохраняем настройки вывода
+        save_output_settings(
+            self._edit_prefix.text().strip() or "cta_",
+            self._chk_batch.isChecked()
+        )
+
+        # Сохраняем пресет наложений (если есть элементы)
+        if self._project.elements:
+            save_last_preset(self._project.elements)
+
         if self._project.elements:
             answer = QMessageBox.question(
                 self, "Выход",
