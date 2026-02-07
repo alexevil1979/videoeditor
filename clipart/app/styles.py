@@ -251,6 +251,10 @@ QFrame#sidebar {
     background-color: #181825;
     border-right: 1px solid #313244;
 }
+QFrame#rightPanel {
+    background-color: #181825;
+    border-left: 1px solid #313244;
+}
 QFrame#bottomBar {
     background-color: #181825;
     border-top: 1px solid #313244;

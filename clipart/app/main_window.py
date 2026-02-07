@@ -190,6 +190,7 @@ class MainWindow(QMainWindow):
         # --- ЛЕВАЯ КОЛОНКА: Библиотека элементов ---
         left_panel = QFrame()
         left_panel.setObjectName("sidebar")
+        left_panel.setMinimumWidth(220)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(6, 6, 6, 6)
         left_layout.setSpacing(0)
@@ -215,7 +216,8 @@ class MainWindow(QMainWindow):
 
         # --- ПРАВАЯ КОЛОНКА: Свойства элемента ---
         right_panel = QFrame()
-        right_panel.setObjectName("sidebar")
+        right_panel.setObjectName("rightPanel")
+        right_panel.setMinimumWidth(300)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(6, 6, 6, 6)
         right_layout.setSpacing(0)
@@ -228,15 +230,8 @@ class MainWindow(QMainWindow):
         )
         scroll.setFrameShape(QFrame.Shape.NoFrame)
 
-        container = QWidget()
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-
         self._properties = ElementProperties()
-        container_layout.addWidget(self._properties)
-        container_layout.addStretch()
-
-        scroll.setWidget(container)
+        scroll.setWidget(self._properties)
         right_layout.addWidget(scroll)
 
         top_splitter.addWidget(right_panel)

@@ -127,6 +127,7 @@ class ElementProperties(QGroupBox):
         super().__init__("СВОЙСТВА ЭЛЕМЕНТА", parent)
         self._element: Optional[OverlayElement] = None
         self._updating = False  # флаг, чтобы избежать рекурсии
+        self.setMinimumWidth(280)
 
         form = QFormLayout(self)
         form.setSpacing(8)
