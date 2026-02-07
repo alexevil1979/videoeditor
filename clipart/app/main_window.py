@@ -23,7 +23,7 @@ from app.models import Project, OverlayElement, UndoRedoManager
 from app.video_preview import VideoPreviewWidget, PlaybackControlBar
 from app.sidebar import SidebarWidget
 from app.elements_table import ElementsTableWidget
-from app.render_engine import RenderWorker
+from app.render_engine import RenderWorker, load_gpu_setting
 from app.github_upload import (
     GitHubUploadWorker, load_github_settings, GITHUB_REPO_URL
 )
@@ -508,8 +508,13 @@ class MainWindow(QMainWindow):
 
         # Диалог прогресса
         dlg = RenderProgressDialog(self)
-        self._render_worker = RenderWorker(self._project, path)
+
+        # Читаем настройку GPU из конфигурации
+        use_gpu = load_gpu_setting()
+
+        self._render_worker = RenderWorker(self._project, path, use_gpu=use_gpu)
         self._render_worker.progress.connect(dlg.set_progress)
+        self._render_worker.log.connect(dlg.add_log)
         self._render_worker.finished_ok.connect(
             lambda p: self._on_render_finished(p, dlg)
         )

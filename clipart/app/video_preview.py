@@ -141,6 +141,11 @@ class VideoPreviewWidget(QWidget):
     element_delete_requested = pyqtSignal(str)        # id
     time_changed = pyqtSignal(float)                  # текущее время (сек)
 
+    # Максимальная частота кадров для превью (снижает нагрузку на CPU)
+    PREVIEW_MAX_FPS = 24
+    # Максимальная ширина кадра для превью (даунскейл экономит CPU и память)
+    PREVIEW_MAX_WIDTH = 960
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(480, 270)
@@ -180,6 +185,10 @@ class VideoPreviewWidget(QWidget):
         # Выделенный элемент
         self._selected_id: Optional[str] = None
 
+        # Оптимизация: пропуск кадров при превью
+        # Если видео 60fps, а превью ограничено 24fps, пропускаем кадры
+        self._frame_skip: int = 1  # 1 = каждый кадр, 2 = каждый второй
+
         # Таймер воспроизведения
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_timer)
@@ -216,7 +225,10 @@ class VideoPreviewWidget(QWidget):
     def play(self):
         if self._cap and not self._playing:
             self._playing = True
-            interval = max(1, int(1000 / self._fps))
+            # Ограничиваем FPS превью, чтобы не грузить CPU
+            preview_fps = min(self._fps, self.PREVIEW_MAX_FPS)
+            self._frame_skip = max(1, round(self._fps / preview_fps))
+            interval = max(1, int(1000 / preview_fps))
             self._timer.start(interval)
 
     def pause(self):
@@ -295,29 +307,58 @@ class VideoPreviewWidget(QWidget):
 
     # --- Внутренние методы ---
     def _read_current_frame(self):
-        """Читает текущий кадр из OpenCV и конвертирует в QPixmap."""
+        """
+        Читает текущий кадр из OpenCV и конвертирует в QPixmap.
+
+        Оптимизация: уменьшает кадр до PREVIEW_MAX_WIDTH перед конвертацией
+        в QPixmap. Это существенно снижает нагрузку на CPU и потребление памяти,
+        т.к. нет необходимости хранить полноразмерный кадр для превью.
+        """
         if not self._cap:
             return
         ret, frame = self._cap.read()
         if not ret:
             self.pause()
             return
+
+        # Даунскейл для превью — ключевая оптимизация CPU
+        h, w = frame.shape[:2]
+        if w > self.PREVIEW_MAX_WIDTH:
+            scale = self.PREVIEW_MAX_WIDTH / w
+            new_w = self.PREVIEW_MAX_WIDTH
+            new_h = int(h * scale)
+            # INTER_AREA — самый быстрый для уменьшения
+            frame = cv2.resize(frame, (new_w, new_h),
+                               interpolation=cv2.INTER_AREA)
+
         # BGR → RGB
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
-        qimg = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888).copy()
+        qimg = QImage(frame_rgb.data, w, h, bytes_per_line,
+                      QImage.Format.Format_RGB888).copy()
         self._frame_pixmap = QPixmap.fromImage(qimg)
 
     def _on_timer(self):
-        """Вызывается таймером при воспроизведении."""
+        """
+        Вызывается таймером при воспроизведении.
+
+        Оптимизация: пропускает кадры (frame_skip) при высоком FPS видео,
+        чтобы превью работало на ≤24 fps и не грузило CPU.
+        Вместо чтения каждого кадра — перепрыгиваем через N кадров.
+        """
         if not self._cap:
             self.pause()
             return
-        self._current_frame += 1
+
+        # Пропускаем кадры для снижения нагрузки
+        self._current_frame += self._frame_skip
         if self._current_frame >= self._total_frames:
             self._current_frame = 0
             self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        elif self._frame_skip > 1:
+            # При пропуске кадров нужно явно перемотать
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, self._current_frame)
 
         self._read_current_frame()
         self.time_changed.emit(self.current_time)

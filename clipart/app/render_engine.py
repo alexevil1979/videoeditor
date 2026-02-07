@@ -2,20 +2,25 @@
 render_engine.py — Рендеринг итогового видео с наложением CTA-элементов.
 
 Использует MoviePy v2 для композиции видео + оверлеи.
-Поддерживает GIF-анимации, PNG, fade in/out.
+Поддерживает:
+  • GPU-кодирование через NVIDIA NVENC (h264_nvenc) — снимает нагрузку с CPU
+  • Автоматическое определение доступности GPU
+  • Фоллбэк на libx264 (CPU) если GPU недоступен
+  • GIF-анимации, PNG, fade in/out
 """
 
 from __future__ import annotations
 
 import os
+import subprocess
 import traceback
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 from PIL import Image as PILImage
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, QSettings
 
 # MoviePy v2 импорты
 try:
@@ -29,6 +34,52 @@ except ImportError:
 from app.models import OverlayElement, Project
 
 
+# ---------------------------------------------------------------------------
+# Определение доступности GPU (NVIDIA NVENC)
+# ---------------------------------------------------------------------------
+_nvenc_available: Optional[bool] = None  # кеш результата
+
+
+def check_nvenc_available() -> bool:
+    """
+    Проверяет, доступен ли кодировщик h264_nvenc в ffmpeg.
+    Результат кешируется.
+    """
+    global _nvenc_available
+    if _nvenc_available is not None:
+        return _nvenc_available
+
+    try:
+        # Находим ffmpeg из imageio-ffmpeg (тот же, что использует MoviePy)
+        try:
+            import imageio_ffmpeg
+            ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            ffmpeg_path = "ffmpeg"
+
+        # Проверяем наличие h264_nvenc в списке кодировщиков
+        result = subprocess.run(
+            [ffmpeg_path, "-hide_banner", "-encoders"],
+            capture_output=True, text=True, timeout=10,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+        )
+        _nvenc_available = "h264_nvenc" in result.stdout
+    except Exception:
+        _nvenc_available = False
+
+    return _nvenc_available
+
+
+def get_gpu_info() -> str:
+    """Возвращает строку с информацией о доступности GPU-кодирования."""
+    if check_nvenc_available():
+        return "NVIDIA NVENC доступен (h264_nvenc)"
+    return "NVENC недоступен — будет использован CPU (libx264)"
+
+
+# ---------------------------------------------------------------------------
+# Загрузка GIF-кадров
+# ---------------------------------------------------------------------------
 def _load_gif_frames(path: str):
     """Загружает кадры GIF и возвращает список numpy-массивов + длительности."""
     frames = []
@@ -47,23 +98,30 @@ def _load_gif_frames(path: str):
     return frames, durations
 
 
+# ---------------------------------------------------------------------------
+# Поток рендеринга
+# ---------------------------------------------------------------------------
 class RenderWorker(QThread):
     """
     Поток рендеринга видео.
     Сигналы:
-      progress(int)  — 0..100
+      progress(int)    — 0..100
       finished_ok(str) — путь к готовому файлу
-      error(str)     — текст ошибки
+      error(str)       — текст ошибки
+      log(str)         — информационные сообщения
     """
 
     progress = pyqtSignal(int)
     finished_ok = pyqtSignal(str)
     error = pyqtSignal(str)
+    log = pyqtSignal(str)
 
-    def __init__(self, project: Project, output_path: str, parent=None):
+    def __init__(self, project: Project, output_path: str,
+                 use_gpu: bool = True, parent=None):
         super().__init__(parent)
         self._project = project
         self._output_path = output_path
+        self._use_gpu = use_gpu
 
     def run(self):
         if not MOVIEPY_AVAILABLE:
@@ -74,6 +132,39 @@ class RenderWorker(QThread):
             self._render()
         except Exception as e:
             self.error.emit(f"Ошибка рендеринга:\n{traceback.format_exc()}")
+
+    def _get_encoding_params(self) -> dict:
+        """
+        Определяет параметры кодирования: GPU (NVENC) или CPU (libx264).
+        Возвращает dict с аргументами для write_videofile().
+        """
+        if self._use_gpu and check_nvenc_available():
+            self.log.emit("Используется GPU-кодирование: NVIDIA NVENC (h264_nvenc)")
+            return {
+                "codec": "h264_nvenc",
+                "ffmpeg_params": [
+                    "-preset", "p4",       # p1(fastest)..p7(quality), p4=balanced
+                    "-rc", "vbr",          # variable bitrate
+                    "-cq", "23",           # качество (ниже = лучше, 18-28 норма)
+                    "-b:v", "0",           # авто-битрейт
+                    "-gpu", "0",           # первый GPU
+                ],
+            }
+        else:
+            if self._use_gpu:
+                self.log.emit(
+                    "NVENC недоступен — используется CPU-кодирование (libx264).\n"
+                    "Убедитесь, что драйверы NVIDIA установлены."
+                )
+            else:
+                self.log.emit("Используется CPU-кодирование: libx264")
+            return {
+                "codec": "libx264",
+                "ffmpeg_params": [
+                    "-preset", "medium",
+                    "-crf", "23",
+                ],
+            }
 
     def _render(self):
         video_path = self._project.video_path
@@ -89,6 +180,9 @@ class RenderWorker(QThread):
         fps = clip.fps
         duration = clip.duration
 
+        self.log.emit(
+            f"Видео: {video_w}x{video_h}, {fps:.1f} fps, {duration:.1f} сек"
+        )
         self.progress.emit(10)
 
         # Создаём оверлейные клипы
@@ -102,8 +196,11 @@ class RenderWorker(QThread):
                 )
                 if overlay is not None:
                     overlay_clips.append(overlay)
+                    self.log.emit(f"  Оверлей: {elem.name}")
             except Exception as e:
-                print(f"Предупреждение: не удалось создать оверлей для {elem.name}: {e}")
+                self.log.emit(
+                    f"  Предупреждение: не удалось создать оверлей для {elem.name}: {e}"
+                )
 
             progress_pct = 10 + int(40 * (idx + 1) / max(total_elems, 1))
             self.progress.emit(progress_pct)
@@ -116,19 +213,24 @@ class RenderWorker(QThread):
         # Обеспечим директорию
         Path(self._output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        # Рендер
+        # Определяем параметры кодирования
+        enc_params = self._get_encoding_params()
         self.progress.emit(55)
+        self.log.emit(f"Кодек: {enc_params['codec']}")
+        self.log.emit("Запись видеофайла...")
 
+        # Рендер
         final.write_videofile(
             self._output_path,
-            codec="libx264",
+            codec=enc_params["codec"],
             audio_codec="aac",
             fps=fps,
-            logger=None,  # Убираем вывод MoviePy
-            preset="medium",
+            logger=None,
+            ffmpeg_params=enc_params.get("ffmpeg_params", []),
         )
 
         self.progress.emit(100)
+        self.log.emit(f"Готово: {self._output_path}")
         self.finished_ok.emit(self._output_path)
 
         # Очищаем ресурсы
@@ -268,3 +370,18 @@ class RenderWorker(QThread):
         clip = clip.with_mask(mask)
 
         return clip
+
+
+# ---------------------------------------------------------------------------
+# Утилита: сохранение/загрузка настройки GPU
+# ---------------------------------------------------------------------------
+def load_gpu_setting() -> bool:
+    """Загружает настройку 'использовать GPU' из QSettings."""
+    s = QSettings("VideoCTAEditor", "VideoCTAEditor")
+    return s.value("render/use_gpu", True, type=bool)
+
+
+def save_gpu_setting(use_gpu: bool) -> None:
+    """Сохраняет настройку 'использовать GPU' в QSettings."""
+    s = QSettings("VideoCTAEditor", "VideoCTAEditor")
+    s.setValue("render/use_gpu", use_gpu)

@@ -14,28 +14,31 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QProgressBar, QFileDialog, QTextEdit,
-    QFormLayout, QGroupBox, QMessageBox
+    QFormLayout, QGroupBox, QMessageBox, QCheckBox
 )
 
 from app.github_upload import load_github_settings, save_github_settings
+from app.render_engine import (
+    check_nvenc_available, get_gpu_info, load_gpu_setting, save_gpu_setting
+)
 
 
 # ---------------------------------------------------------------------------
 # Диалог прогресса рендеринга
 # ---------------------------------------------------------------------------
 class RenderProgressDialog(QDialog):
-    """Показывает прогресс-бар во время рендеринга видео."""
+    """Показывает прогресс-бар и лог во время рендеринга видео."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Рендеринг видео")
-        self.setFixedSize(450, 180)
+        self.setFixedSize(520, 340)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
         self.label = QLabel("Подготовка к рендерингу...")
         self.label.setFont(QFont("Segoe UI", 12))
@@ -49,12 +52,23 @@ class RenderProgressDialog(QDialog):
         self.status_label = QLabel("")
         layout.addWidget(self.status_label)
 
+        # Лог рендеринга
+        self.log = QTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumHeight(140)
+        self.log.setStyleSheet("font-size: 11px; font-family: Consolas, monospace;")
+        layout.addWidget(self.log)
+
         # Кнопка отмены
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         self.btn_cancel = QPushButton("Отмена")
         btn_row.addWidget(self.btn_cancel)
         layout.addLayout(btn_row)
+
+    def add_log(self, msg: str):
+        """Добавляет строку в лог рендеринга."""
+        self.log.append(msg)
 
     def set_progress(self, value: int):
         self.progress_bar.setValue(value)
@@ -74,6 +88,7 @@ class RenderProgressDialog(QDialog):
     def set_error(self, msg: str):
         self.label.setText("❌ Ошибка рендеринга")
         self.status_label.setText(msg)
+        self.log.append(f"\n❌ {msg}")
         self.btn_cancel.setText("Закрыть")
 
 
@@ -81,12 +96,12 @@ class RenderProgressDialog(QDialog):
 # Диалог настроек
 # ---------------------------------------------------------------------------
 class SettingsDialog(QDialog):
-    """Настройки приложения: GitHub-токен, путь к репозиторию."""
+    """Настройки приложения: GPU-кодирование, GitHub-токен, путь к репозиторию."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Настройки")
-        self.setFixedSize(520, 300)
+        self.setFixedSize(560, 440)
         self.setWindowFlags(
             self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint
         )
@@ -94,7 +109,39 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
 
-        # Группа GitHub
+        # ================= Группа GPU-кодирования =================
+        grp_gpu = QGroupBox("Рендеринг (GPU / CPU)")
+        gpu_layout = QVBoxLayout(grp_gpu)
+
+        self.chk_gpu = QCheckBox("Использовать GPU (NVIDIA NVENC) для кодирования видео")
+        self.chk_gpu.setToolTip(
+            "Переносит кодирование H.264 с CPU на видеокарту NVIDIA.\n"
+            "Существенно снижает нагрузку на процессор и ускоряет рендеринг.\n"
+            "Требуется видеокарта NVIDIA с поддержкой NVENC (GTX 600+)."
+        )
+        gpu_layout.addWidget(self.chk_gpu)
+
+        # Статус NVENC
+        gpu_status = get_gpu_info()
+        nvenc_ok = check_nvenc_available()
+        status_icon = "✅" if nvenc_ok else "⚠️"
+        self.lbl_gpu_status = QLabel(f"{status_icon} {gpu_status}")
+        self.lbl_gpu_status.setStyleSheet(
+            f"color: {'#a6e3a1' if nvenc_ok else '#fab387'}; font-size: 12px;"
+        )
+        gpu_layout.addWidget(self.lbl_gpu_status)
+
+        gpu_hint = QLabel(
+            "GTX 1060 6GB — полная поддержка NVENC H.264/H.265.\n"
+            "При включённом GPU рендеринг в 3‑5× быстрее, CPU свободен."
+        )
+        gpu_hint.setStyleSheet("color: #6c7086; font-size: 11px;")
+        gpu_hint.setWordWrap(True)
+        gpu_layout.addWidget(gpu_hint)
+
+        layout.addWidget(grp_gpu)
+
+        # ================= Группа GitHub =================
         grp = QGroupBox("GitHub")
         grp_layout = QFormLayout(grp)
         grp_layout.setSpacing(10)
@@ -148,10 +195,12 @@ class SettingsDialog(QDialog):
         settings = load_github_settings()
         self.edit_token.setText(settings.get("token", ""))
         self.edit_repo.setText(settings.get("repo_path", ""))
+        self.chk_gpu.setChecked(load_gpu_setting())
 
     def _save(self):
         save_github_settings(self.edit_token.text().strip(),
                              self.edit_repo.text().strip())
+        save_gpu_setting(self.chk_gpu.isChecked())
         self.accept()
 
     def _browse_repo(self):
